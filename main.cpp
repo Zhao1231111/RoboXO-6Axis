@@ -18,9 +18,17 @@
 #include "eigen/Eigen/Eigen"
 #include "general_6s.h"
 #include "ecrt.h"
+#include "probe_detect_tasks.h" // 引入任务声明
 
 using namespace Eigen;
 using namespace std;
+
+// --- 接触检测相关的全局变量定义 ---
+bool is_touch_probing = false;       // 标志位：是否正在进行下探检测
+bool touch_detected = false;         // 标志位：是否已检测到接触
+signed int baseline_tor[6] = {0};    // 基准力矩
+int TORQUE_THRESHOLD = 50;           // 力矩突变阈值 (需根据实际调整)
+
 
 // 外部引用的机械臂控制算法对象
 extern General_6S* g_general_6s;
@@ -340,6 +348,16 @@ void cyclic_task() {
                 tor_deque_out.push_back(actualtor[i]);
                 angle_deque_out.push_back(g_general_6s->getActPositionAngle(i));
             }
+            
+            // --- 接触检测逻辑 ---
+            if (is_touch_probing && !touch_detected) {
+                // 判断 J2(i=1) 或 J3(i=2) 是否受力突变
+                if (abs(actualtor[1] - baseline_tor[1]) > TORQUE_THRESHOLD || 
+                    abs(actualtor[2] - baseline_tor[2]) > TORQUE_THRESHOLD) {
+                    touch_detected = true;
+                    // 在 EtherCAT 线程中发现接触，应用层将捕获这个标志位并清空队列
+                }
+            }
         }
         
         // 3. 时钟同步
@@ -358,101 +376,6 @@ void cyclic_task() {
     }
 }
 
-// --- 单轴运动测试全局变量 ---
-double single_joint_test[6] = {0,0,0,0,0,0};
-
-// --- 多轴运动规划与执行 ---
-void multi_joint_move_test() {
-    VectorXd origin_point_joint_test(6); // 初始位置 (角度制)
-	VectorXd target_point_joint_test(6); // 目标位置 (角度制)
-    VectorXd vel_current_joint_test(6);  // 当前速度
-    VectorXd acc_current_joint_test(6);  // 当前加速度
-
-    double pos_cur_ang[6] = {0};                 
-    
-    // 获取当前实际角度作为起点
-    for (int i = 0; i < 6; i++) {
-        pos_cur_ang[i] = g_general_6s->getActPositionAngle(i); 
-        origin_point_joint_test(i) = pos_cur_ang[i];
-		target_point_joint_test(i) = single_joint_test[i];
-    }
-    
-    // ---------------------------------------------------------
-    // ------------- 填空部分开始 -------------
-    // 请在此处填写多轴运动的目标点，以及相关规划参数
-    // 并调用适当的插补函数生成多轴运动轨迹 trajectory_joint_test
-    
-    vel_current_joint_test << 0, 0, 0, 0, 0, 0;
-    acc_current_joint_test << 0, 0, 0, 0, 0, 0;
-    
-    // 规划参数配置
-    double Ts_joint_test = 0.001;               // 运动周期 1ms
-    double velPerc_joint_test = 10;             // 速度百分比
-    double accPerc_joint_test = 10;             // 加速度百分比
-    double decPerc_joint_test = 10;             // 减速度百分比
-    double jerkPerc_joint_test = 10;            // 加加速度百分比
-    std::deque<double> trajectory_joint_test;
-    
-    // 调用底层库进行关节空间插补，生成轨迹点序列
-    g_general_6s->move_joint_interp(target_point_joint_test, origin_point_joint_test, 
-        vel_current_joint_test, acc_current_joint_test, Ts_joint_test, velPerc_joint_test,
-        accPerc_joint_test, decPerc_joint_test, jerkPerc_joint_test, trajectory_joint_test);
-    
-    
-    // ------------- 填空部分结束 -------------
-    // ---------------------------------------------------------
-
-    // 请求上电并开始执行轨迹
-    if (!PowerStatus) NeedPowerOn = 1;
-    g_general_6s->set_angle_deque(trajectory_joint_test); // 写入运动轨迹序列，交由 EtherCAT 线程下发
-    
-    sleep(5); // 等待运动初始化
-    
-    // 运动过程状态监控
-    double cur_angle_double[6];
-    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
-        for (int i = 0; i < 6; i++) cur_angle_double[i] = g_general_6s->getActPositionAngle(i);
-        printf("运行中，当前角度: %lf %lf %lf %lf %lf %lf \\n", cur_angle_double[0], cur_angle_double[1], cur_angle_double[2], cur_angle_double[3], cur_angle_double[4], cur_angle_double[5]);
-        
-        if (g_general_6s->get_angle_deque().empty() && PowerStatus) NeedPowerOff = 1;
-        sleep(1); // 每秒监控一次
-    }
-        
-    // --- 运动结束后的数据存储 ---
-    double cur_angle_tor[6];
-    
-    FILE *outFile0 = fopen("/home/seuauto/Desktop/data/data_i1.txt", "w"); // 保存期望角度 (输入)
-    FILE *outFile1 = fopen("/home/seuauto/Desktop/data/data_o1.txt", "w"); // 保存实际角度 (输出)
-    FILE *outFile3 = fopen("/home/seuauto/Desktop/data/data_o3.txt", "w"); // 保存实际力矩 (输出)
-    
-    int len = trajectory_joint_test.size();
-    int len1 = angle_deque_out.size();
-    cout << "输出轨迹长度: " << len1 << endl;
-
-    // 写入期望轨迹
-    int k = 0;
-    while(k < len) {
-        for(int i = 0; i < 6; i++) cur_angle_double[i] = trajectory_joint_test[k + i];
-        k += 6;
-        fprintf(outFile0, "期望角度: %lf %lf %lf %lf %lf %lf \\n", cur_angle_double[0], cur_angle_double[1], cur_angle_double[2], cur_angle_double[3], cur_angle_double[4], cur_angle_double[5]);
-    }
-    fclose(outFile0);
-
-    // 写入实际读取轨迹与力矩
-    k = 0;
-    while(k < len1) {
-        for(int i = 0; i < 6; i++) {
-            cur_angle_double[i] = angle_deque_out[k + i];
-            cur_angle_tor[i] = tor_deque_out[k + i];
-        }
-        k += 6;
-        fprintf(outFile1, "实际角度: %lf %lf %lf %lf %lf %lf \\n", cur_angle_double[0], cur_angle_double[1], cur_angle_double[2], cur_angle_double[3], cur_angle_double[4], cur_angle_double[5]);
-        fprintf(outFile3, "实际力矩: %lf %lf %lf %lf %lf %lf \\n", cur_angle_tor[0], cur_angle_tor[1], cur_angle_tor[2], cur_angle_tor[3], cur_angle_tor[4], cur_angle_tor[5]);
-    }
-    fclose(outFile1);
-    fclose(outFile3);
-    cout << "数据存储完成!" << endl;
-}
 
 // --- 初始化与功能测试 ---
 void test_robot_func() {
@@ -513,10 +436,12 @@ void test_robot_func() {
     
     print_current_pos(motor_pa.encoder);
     
-    // 触发多轴运动测试
+    
+    // 触发任务状态机
     NeedPowerOn = 1;
     sleep(5);
-    multi_joint_move_test();
+    // multi_joint_move_test(); // 原来的调用方式
+    run_task_state_machine(); // 新的任务状态机调用
 }
 
 // --- 启动 EtherCAT 主站 ---
