@@ -505,9 +505,20 @@ int start_controller() {
     std::thread a(StartEC);
     a.detach();
     
-    // 给予主站足够的时间激活及从站上电 (30秒)
-    sleep(30);
-  
+    // 动态等待主站激活及从站进入 OP 状态
+    int wait_time = 0;
+    printf("等待从站进入 OP 状态...\n");
+    while (!(flag[0] == 1 && flag[1] == 1 && flag[2] == 1 && flag[3] == 1 && flag[4] == 1 && flag[5] == 1)) {
+        sleep(1);
+        wait_time++;
+        if (wait_time >= 30) {
+            printf("警告: 等待从站进入 OP 状态超时 (30秒)!\n");
+            break;
+        }
+    }
+    if (wait_time < 30) {
+        printf("所有从站已就绪，耗时 %d 秒。\n", wait_time);
+    }
     // 运行机器人测试流程
     test_robot_func();
     return 0;
