@@ -1,6 +1,4 @@
 #include <unistd.h>
-#include <errno.h>
-#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/resource.h>
@@ -12,9 +10,6 @@
 #include <sched.h> /* sched_setscheduler() */
 #include <thread>
 #include <deque> 
-#include <iostream>
-#include <sstream>
-#include <fstream>
 #include "eigen/Eigen/Eigen"
 #include "general_6s.h"
 #include "ecrt.h"

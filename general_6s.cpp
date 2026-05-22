@@ -505,7 +505,7 @@ void General_6S::move_line_interp(const VectorXd &targetPoint,
         }
         calc_Interp_5_1_5(0, 1, Ts, maxVelAcs/displacementAcs, maxAccAcs/displacementAcs,
                 maxDecelAcs/displacementAcs, maxJerk/displacementAcs, rlstAcs, velCurrent / displacement, accCurrent / displacement );
-        rlst = rlstAcs;
+        rlst = rlstMcs; // modified here  rlstAcs
 	}
 	else
 	{

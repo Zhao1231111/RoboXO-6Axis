@@ -8,6 +8,46 @@ using namespace std;
 
 double single_joint_test[6] = {0,0,0,0,0,0};
 
+void move_home_position(VectorXd origin_point_joint_test = VectorXd::Zero(6))   
+{
+    VectorXd target_point_joint_test(6);         // 目标位置,角度制
+    VectorXd velocity_current_joint_test(6);	 // 当前速度,角度制
+    VectorXd acceleration_current_joint_test(6); // 当前加速度,角度制
+
+    // 设置目标位置角度值，从当前位置开始运动固定角度
+    target_point_joint_test(0) = 0;
+    target_point_joint_test(1) = 0;
+    target_point_joint_test(2) = 0;
+    target_point_joint_test(3) = 0;
+    target_point_joint_test(4) = 0;
+    target_point_joint_test(5) = 0;
+    velocity_current_joint_test << 0, 0, 0, 0, 0, 0;		  // 设置当前速度
+    acceleration_current_joint_test << 0, 0, 0, 0, 0, 0;      // 设置当前加速度
+    double Ts_joint_test = 0.001;					          // 设置运动周期
+    double velocityPercent_joint_test = 50;					  // 设置速度百分比
+    double accelerationPercent_joint_test = 10;				  // 设置加速度百分比
+    double decelerationPercent_joint_test = 10;				  // 设置减速度百分比
+    double jacobiPercent_joint_test = 10;					  // 设置雅可比速度百分比 ，这些参数对应的是什么
+
+    //************************************ 计算关节角度插补 ********************************
+    std::deque<double> trajectory_joint_test;       // 队列存储整个路径中对应六个关节角度的插值
+
+    // 计算完整个运动过程的的六关节角度序列，存入trajectory_joint_test队列中
+    g_general_6s->move_joint_interp(target_point_joint_test,
+        origin_point_joint_test, velocity_current_joint_test, acceleration_current_joint_test, Ts_joint_test, velocityPercent_joint_test,
+        accelerationPercent_joint_test, decelerationPercent_joint_test, jacobiPercent_joint_test, trajectory_joint_test);
+
+    if (!PowerStatus) // 判断使能状态
+        NeedPowerOn = true;		  // 开启使能
+
+
+    // 插补轨迹写入运动队列
+    g_general_6s->add_angle_deque(trajectory_joint_test); // 设置运动轨迹，整个轨迹的关节角度序列
+
+    //sleep(5);
+}
+
+
 void multi_joint_move_test() {
     VectorXd origin_point_joint_test(6); // 初始位置 (角度制)
 	VectorXd target_point_joint_test(6); // 目标位置 (角度制)
@@ -266,7 +306,60 @@ void load_task_config(VectorXd& board_center, VectorXd& target_point, int& torqu
     std::cout << "[配置读取] 成功从 config.txt 加载参数！" << std::endl;
 }
 
+void get_joint_Position_initial(VectorXd &position_current_angle)
+{
+     for (int i = 0; i < 6; i++)
+    {
+        position_current_angle[i] = g_general_6s->getActPositionAngle(i); // 获取当前位置角度值
+    }
+}
+
+
 void run_task_state_machine() {
+    // **************************** 配置关节运动信息 ***************************
+    double current_angle_double[6];
+    VectorXd joint_angles_degree_offset(6);
+    VectorXd joint_angles_degree_offset1(6);
+    VectorXd joint_angles_degree_offset2(6);
+    joint_angles_degree_offset1<<  30, 0, 0, 0, 0, 0;
+    joint_angles_degree_offset<<    0, 0, 0, 0, 0, 0;
+    joint_angles_degree_offset2<< -30, 0, 0, 0, 0, 0;
+
+    //******************************** 运动测试 *******************************
+    VectorXd position_joint_initial(6);     // 初始关节位置
+    VectorXd target_point_joint_test(6);    // 目标关节位置
+    VectorXd target_point_cartesian_test(6);      // 目标直角坐标
+
+    //   1. 复位
+    get_joint_Position_initial(position_joint_initial);     // 读取初始时刻关节真实位置
+    move_home_position(position_joint_initial);
+    //    2. 检查复位的关节序列是否输出完毕
+    sleep(10);
+    //    3. 关节运动到指定姿势 (PTP 插补)
+    get_joint_Position_initial(position_joint_initial);     // 读取复位以后关节真实位置
+    joint_motion_test(joint_angles_degree_offset1,position_joint_initial,target_point_joint_test,target_point_cartesian_test);
+    sleep(10); // 等待关节运动完成
+
+    //    4. 开启直线运动 (Cartesian Line Interpolation)
+    // 更新直线运动的起点（即刚才关节运动的目标点或者重新读取实际位置）
+    VectorXd current_joint_for_line(6);
+    get_joint_Position_initial(current_joint_for_line);
+    
+    MatrixXd trans_matrix;
+    g_general_6s->calc_forward_kin(current_joint_for_line, trans_matrix);
+    VectorXd current_cartesian_for_line = g_general_6s->tr_2_MCS(trans_matrix);
+    
+    VectorXd line_target_joint(6);
+    VectorXd line_target_cartesian(6);
+    
+    // 执行直线移动，比如沿 X 轴移动 0.1m (10cm)
+    lining_motion_test(0.1, 0.0, 0.0, current_joint_for_line, current_cartesian_for_line, line_target_joint, line_target_cartesian);
+    //    5. 复位
+    move_home_position(line_target_joint);
+    //    6. 检查关节序列是否输出完毕
+    sleep(15);
+    
+    /*
     TaskState current_state = TaskState::INIT;
     
     while (true) {
@@ -409,4 +502,5 @@ void run_task_state_machine() {
         }
         usleep(500000); // 500ms
     }
+    */
 }
