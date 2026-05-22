@@ -334,32 +334,8 @@ void run_task_state_machine() {
     get_joint_Position_initial(position_joint_initial);     // 读取初始时刻关节真实位置
     move_home_position(position_joint_initial);
     //    2. 检查复位的关节序列是否输出完毕
-    sleep(10);
-    //    3. 关节运动到指定姿势 (PTP 插补)
-    get_joint_Position_initial(position_joint_initial);     // 读取复位以后关节真实位置
-    joint_motion_test(joint_angles_degree_offset1,position_joint_initial,target_point_joint_test,target_point_cartesian_test);
-    sleep(10); // 等待关节运动完成
+    sleep(10);    
 
-    //    4. 开启直线运动 (Cartesian Line Interpolation)
-    // 更新直线运动的起点（即刚才关节运动的目标点或者重新读取实际位置）
-    VectorXd current_joint_for_line(6);
-    get_joint_Position_initial(current_joint_for_line);
-    
-    MatrixXd trans_matrix;
-    g_general_6s->calc_forward_kin(current_joint_for_line, trans_matrix);
-    VectorXd current_cartesian_for_line = g_general_6s->tr_2_MCS(trans_matrix);
-    
-    VectorXd line_target_joint(6);
-    VectorXd line_target_cartesian(6);
-    
-    // 执行直线移动，比如沿 X 轴移动 0.1m (10cm)
-    lining_motion_test(0.1, 0.0, 0.0, current_joint_for_line, current_cartesian_for_line, line_target_joint, line_target_cartesian);
-    //    5. 复位
-    move_home_position(line_target_joint);
-    //    6. 检查关节序列是否输出完毕
-    sleep(15);
-    
-    /*
     TaskState current_state = TaskState::INIT;
     
     while (true) {
@@ -502,5 +478,4 @@ void run_task_state_machine() {
         }
         usleep(500000); // 500ms
     }
-    */
 }
