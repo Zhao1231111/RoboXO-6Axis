@@ -44,7 +44,15 @@ void move_home_position(VectorXd origin_point_joint_test = VectorXd::Zero(6))
     // 插补轨迹写入运动队列
     g_general_6s->add_angle_deque(trajectory_joint_test); // 设置运动轨迹，整个轨迹的关节角度序列
 
-    //sleep(5);
+    // --- 阻塞等待机制 ---
+    // 1. 如果当前处于未上电状态，等待底层 EtherCAT 线程完成上电初始化
+    while (!PowerStatus) {
+        usleep(50000);
+    }
+    // 2. 上电完成后，等待轨迹被完全消耗完毕
+    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
+        usleep(50000); 
+    }
 }
 
 
@@ -334,7 +342,7 @@ void run_task_state_machine() {
     get_joint_Position_initial(position_joint_initial);     // 读取初始时刻关节真实位置
     move_home_position(position_joint_initial);
     //    2. 检查复位的关节序列是否输出完毕
-    sleep(10);    
+    cout << "已回到原位" << endl;   
 
     TaskState current_state = TaskState::INIT;
     
@@ -405,12 +413,17 @@ void run_task_state_machine() {
                 VectorXd origin_cartesian = g_general_6s->tr_2_MCS(trans_matrix);
                 
                 // 下探最大距离 10cm
-                downward_probe_motion(-0.1, origin_point_joint, origin_cartesian);
+                downward_probe_motion(-100, origin_point_joint, origin_cartesian);
                 
                 // 持续等待触碰
                 while (is_touch_probing && !g_general_6s->get_angle_deque().empty()) {
                     if (touch_detected) {
                         cout << "[任务状态] 接触白板！已停止下探。" << endl;
+                        cout << "     -> [力矩详情] 阈值设定: " << TORQUE_THRESHOLD << endl;
+                        cout << "     -> [力矩详情] 基准力矩 J2: " << baseline_tor[1] << " | J3: " << baseline_tor[2] << endl;
+                        cout << "     -> [力矩详情] 触发力矩 J2: " << trigger_tor_1 << " | J3: " << trigger_tor_2 << endl;
+                        cout << "     -> [力矩详情] 实际偏差 J2: " << abs(trigger_tor_1 - baseline_tor[1]) 
+                             << " | J3: " << abs(trigger_tor_2 - baseline_tor[2]) << endl;
                         break;
                     }
                     usleep(10000); // 10ms 循环检查
@@ -437,13 +450,13 @@ void run_task_state_machine() {
                 
                 VectorXd press_joint_target(6);
                 VectorXd press_cartesian_target(6);
-                lining_motion_test(0.0, 0.0, -0.003, origin_point_joint, origin_cartesian, press_joint_target, press_cartesian_target);
+                lining_motion_test(0.0, 0.0, -3.0, origin_point_joint, origin_cartesian, press_joint_target, press_cartesian_target);
                 
                 while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
                     usleep(100000);
                 }
                 
-                current_state = TaskState::WIPING_BOARD;
+                current_state = TaskState::TASK_FINISHED;
                 break;
             }
             case TaskState::WIPING_BOARD: {

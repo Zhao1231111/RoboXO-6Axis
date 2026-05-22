@@ -1,8 +1,8 @@
-# 白板中心相对于机器人基座的位姿 (X, Y, Z, Roll, Pitch, Yaw)
-board_center_base 0.5 0.0 0.3 0.0 0.0 0.0
+# 白板中心相对于机器人基座的位姿 (单位: mm, deg) (X, Y, Z, Roll, Pitch, Yaw)
+board_center_base 0.0 0.0 0.0 0.0 0.0 0.0
 
 # 初始下探起点在白板坐标系下的位姿 (X, Y, Z, Roll, Pitch, Yaw)
-target_in_board 0.0 0.0 -0.05 0.0 0.0 0.0
+target_in_board 500.0 0.0 600.0 3.14159 0.0 0.0
 
 # 力矩检测阈值
-torque_threshold 50
+torque_threshold 150

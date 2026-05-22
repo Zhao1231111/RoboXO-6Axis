@@ -23,6 +23,8 @@ extern bool is_touch_probing;
 extern bool touch_detected;
 extern signed int baseline_tor[6];
 extern int TORQUE_THRESHOLD; // 力矩突变阈值
+extern int trigger_tor_1;    // 触发瞬间 J2 的实际力矩
+extern int trigger_tor_2;    // 触发瞬间 J3 的实际力矩
 
 // --- 任务状态枚举 ---
 enum class TaskState {
