@@ -36,15 +36,8 @@ enum class TaskState {
     ERROR               // 异常处理状态
 };
 
-// --- 原有测试任务与变量 ---
-extern double single_joint_test[6];
-
-void multi_joint_move_test();
-VectorXd lining_motion_test(double x,double y,double z,VectorXd origin_point_angle_degree,VectorXd origin_point_cartesian_coordinate,VectorXd &target_point_joint_test,VectorXd &target_point_cartesian_coordinate);
-void joint_motion_test(VectorXd joint_angles_degree_offset,VectorXd origin_point_joint_test,VectorXd &target_point_joint_test,VectorXd &target_point_cartesian_test);
-
-// --- 新增：封装好的 PTP 笛卡尔坐标系移动函数 ---
-void ptp_motion_to_cartesian_base(VectorXd target_cartesian_base);
+// --- 导入运动控制模块 ---
+#include "motion_control.h"
 
 // --- 状态机任务主循环 ---
 void run_task_state_machine();

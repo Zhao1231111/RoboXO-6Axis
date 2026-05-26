@@ -1,0 +1,69 @@
+#ifndef MOTION_CONTROL_H
+#define MOTION_CONTROL_H
+
+#include <deque>
+#include <unistd.h>
+#include <iostream>
+#include "eigen/Eigen/Eigen"
+#include "general_6s.h"
+
+using namespace Eigen;
+using namespace std;
+
+// --- 全局依赖变量 (通常在 main.cpp 中定义) ---
+extern General_6S* g_general_6s;
+extern bool PowerStatus;
+extern bool NeedPowerOn;
+extern bool NeedPowerOff;
+extern std::deque<double> angle_deque_out;
+extern std::deque<int> tor_deque_out;
+
+extern double single_joint_test[6];
+
+/**
+ * @brief 将机器人的各个关节移动到初始（零点）位置，并阻塞等待直至完成
+ * @param origin_point_joint_test 目标零点角度，默认为全零
+ */
+void move_home_position(VectorXd origin_point_joint_test = VectorXd::Zero(6));
+
+/**
+ * @brief 多关节联合移动测试，包含简单的控制和运行状态监控，运动数据会被记录到文件中
+ */
+void multi_joint_move_test();
+
+/**
+ * @brief 在笛卡尔坐标系下的直线插补运动，基于当前位姿移动指定的增量 (x, y, z)
+ * @param x, y, z 直线移动的增量距离
+ * @param origin_point_angle_degree 起点关节角度
+ * @param origin_point_cartesian_coordinate 起点笛卡尔位姿
+ * @param target_point_joint_test 返回：终点的关节角度
+ * @param target_point_cartesian_coordinate 返回：终点的笛卡尔位姿
+ * @return 计算得到的终点笛卡尔位姿
+ */
+VectorXd lining_motion_test(double x, double y, double z, VectorXd origin_point_angle_degree, VectorXd origin_point_cartesian_coordinate, VectorXd &target_point_joint_test, VectorXd &target_point_cartesian_coordinate);
+
+/**
+ * @brief 专门用于慢速下探的直线运动函数，保证检测精度
+ * @param z_offset Z轴下探深度偏移量
+ * @param origin_point_angle_degree 起点关节角度
+ * @param origin_point_cartesian_coordinate 起点笛卡尔位姿
+ * @return 计算得到的终点笛卡尔位姿
+ */
+VectorXd downward_probe_motion(double z_offset, VectorXd origin_point_angle_degree, VectorXd origin_point_cartesian_coordinate);
+
+/**
+ * @brief 关节空间增量移动测试，根据给定各关节的相对偏移量移动
+ * @param joint_angles_degree_offset 各关节的相对角度增量
+ * @param origin_point_joint_test 起点关节角度
+ * @param target_point_joint_test 返回：计算得到的终点关节角度
+ * @param target_point_cartesian_test 返回：计算得到的终点笛卡尔位姿
+ */
+void joint_motion_test(VectorXd joint_angles_degree_offset, VectorXd origin_point_joint_test, VectorXd &target_point_joint_test, VectorXd &target_point_cartesian_test);
+
+/**
+ * @brief 阻塞式 PTP (Point-to-Point) 插补运动，通过给定的基座系笛卡尔坐标直接控制移动
+ * @param target_cartesian_base 目标笛卡尔坐标系位姿
+ */
+void ptp_motion_to_cartesian_base(VectorXd target_cartesian_base);
+
+#endif // MOTION_CONTROL_H

@@ -16,6 +16,7 @@ set(SOURCES
     axis.cpp
     general_6s.cpp
     probe_detect_tasks.cpp
+    motion_control.cpp
 )
 
 # 生成可执行文件
