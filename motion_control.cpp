@@ -224,7 +224,7 @@ VectorXd downward_probe_motion(double z_offset, VectorXd origin_point_angle_degr
     velocity_current_rectangular = 0.0;		  
     acceleration_current_rectangular = 0.0;	  
     double Ts_joint = 0.001;				  
-    double maxVelocityLimit = 2.0;		  // 极低速度 2mm/s
+    double maxVelocityLimit = 10.0;		  // 极低速度 2mm/s
     double maxAccelerationLimit = 10;	  
     double maxDecelerationLimit = -10;	  
     double maxJerkLimit = 10;		  
@@ -246,6 +246,9 @@ VectorXd downward_probe_motion(double z_offset, VectorXd origin_point_angle_degr
         usleep(50000);
     }
     
+    // 延时 500ms，避开起步加速阶段的动摩擦力和惯性力矩峰值
+    usleep(500000);
+
     // 开启碰撞检测标志，通知实时线程开始检测力矩
     is_touch_probing = true;
     touch_detected = false;
@@ -254,7 +257,7 @@ VectorXd downward_probe_motion(double z_offset, VectorXd origin_point_angle_degr
     while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
         if (touch_detected) {
             std::cout << "\n[底层运动控制] 触发力矩检测！紧急停止当前动作，截断剩余轨迹。" << std::endl;
-            g_general_6s->get_angle_deque().clear(); // 关键：清空队列，让机器人立刻停下！
+            // 紧急停止的清理操作已移交到底层 EtherCAT 线程内部执行，以保证线程安全！
             break;
         }
         usleep(10000); // 10ms 循环检查

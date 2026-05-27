@@ -386,7 +386,8 @@ void cyclic_task() {
                     trigger_tor_1 = actualtor[1];
                     trigger_tor_2 = actualtor[2];
                     touch_detected = true;
-                    // 在 EtherCAT 线程中发现接触，应用层将捕获这个标志位并清空队列
+                    // 在 EtherCAT 线程内部清空队列，保证线程安全，防止 double free！
+                    g_general_6s->get_angle_deque().clear();
                 }
             }
         }

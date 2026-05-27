@@ -58,6 +58,14 @@ void run_task_state_machine() {
     move_home_position();
     cout << " -> 已安全回到原位！" << endl;
 
+    cout << "打开夹爪" << endl;
+    set_gripper(true);
+    usleep(1000000);
+
+    cout << "闭合夹爪" << endl;
+    set_gripper(false);
+
+
     // ------------------- 2. 移动到白板上方基准点 -------------------
     cout << "\n[动作 2] 正在移动到白板上方(基于工件坐标系)..." << endl;
     
