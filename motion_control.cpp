@@ -339,3 +339,18 @@ void ptp_motion_to_cartesian_base(VectorXd target_cartesian_base) {
         usleep(50000); 
     }
 }
+
+extern int gripper_io_data;
+extern bool gripper_action_req;
+
+void set_gripper(bool open) {
+    if (open) {
+        // 打开夹爪 (对应 io15 = 1, io16 = 0)
+        gripper_io_data = 16384; 
+    } else {
+        // 关闭夹爪 (对应 io15 = 0, io16 = 1)
+        gripper_io_data = 32768; 
+    }
+    gripper_action_req = true;
+    usleep(500000); // 延时等待气缸动作完成
+}

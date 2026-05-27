@@ -68,4 +68,10 @@ void joint_motion_test(VectorXd joint_angles_degree_offset, VectorXd origin_poin
  */
 void ptp_motion_to_cartesian_base(VectorXd target_cartesian_base);
 
+/**
+ * @brief 设置夹爪的开合状态
+ * @param open true为打开，false为关闭
+ */
+void set_gripper(bool open);
+
 #endif // MOTION_CONTROL_H

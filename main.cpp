@@ -51,10 +51,10 @@ static ec_master_t* master = NULL;
 static ec_master_state_t master_state = {};
 static ec_domain_t* domain1 = NULL;
 static ec_domain_state_t domain1_state = {};
-static ec_slave_config_t* sc[6] = {};
-static ec_slave_config_state_t sc_state[6] = {};
+static ec_slave_config_t* sc[7] = {};
+static ec_slave_config_state_t sc_state[7] = {};
 
-int flag[6] = { 0 }; // 伺服准备好标志
+int flag[7] = { 0 }; // 伺服准备好标志
 int flag2 = 0;       // 上电状态机流转标志
 
 // 过程数据指针
@@ -67,16 +67,22 @@ static uint8_t* domain1_pd = NULL;
 #define PANASONIC_3 0,3
 #define PANASONIC_4 0,4
 #define PANASONIC_5 0,5
-#define num_ 6
+#define IO_ban 0,6
+#define num_ 7
 
-uint16_t a[6] = { 0 };
-uint16_t p[6] = { 0,1,2,3,4,5 };
+uint16_t a[7] = { 0 };
+uint16_t p[7] = { 0,1,2,3,4,5,6 };
 #define VID_PID 0x00000922,0x00000a01 // 松下伺服厂商ID和产品代码
+#define VID_PID2 0x00000c6d,0x00000001 // IO板厂商ID和产品代码
 
 // 运行状态标志
 bool PowerStatus = 0; // 伺服上电状态
 bool NeedPowerOn = 0; // 请求上电标志
 bool NeedPowerOff = 0; // 请求下电标志
+
+// --- 夹爪控制变量 ---
+int gripper_io_data = 0;
+bool gripper_action_req = false;
 
 std::deque<double> angle_deque_out;
 std::deque<int> tor_deque_out;
@@ -96,6 +102,8 @@ static struct {
     unsigned int torque_actual_value[6];
     unsigned int BC[6];
     unsigned int F[6];
+    unsigned int io_out;
+    unsigned int io_in;
 } offset;
 
 // Domain1 注册的 PDO 对象表 (CiA 402)
@@ -178,6 +186,8 @@ const static ec_pdo_entry_reg_t domain1_regs[] = {
     {PANASONIC_5, VID_PID, 0x603F, 0, &offset.F[5]},
     {PANASONIC_5, VID_PID, 0x60FD, 0, &offset.digital_inputs[5]},
     {PANASONIC_5, VID_PID, 0x6077, 0, &offset.torque_actual_value[5]},
+    {IO_ban, VID_PID2, 0x7000, 0, &offset.io_out},
+    {IO_ban, VID_PID2, 0x6000, 0, &offset.io_in},
     {}
 };
 
@@ -198,6 +208,25 @@ static ec_sync_info_t device_syncs[] = {
     { 1, EC_DIR_INPUT, 0, NULL, EC_WD_DISABLE },
     { 2, EC_DIR_OUTPUT, 1, device_pdos + 0, EC_WD_ENABLE },
     { 3, EC_DIR_INPUT, 1, device_pdos + 1, EC_WD_DISABLE },
+    { 0xFF }
+};
+
+// --- IO板 PDO 配置 ---
+static ec_pdo_entry_info_t device2_pdo_entries[] = {
+    {0x7000, 0x00, 16},
+    {0x6000, 0x00, 16},
+};
+
+static ec_pdo_info_t device2_pdos[] = {
+    {0x1600, 1, device2_pdo_entries + 0 },
+    {0x1A00, 1, device2_pdo_entries + 1 }
+};
+
+static ec_sync_info_t device2_syncs[] = {
+    { 0, EC_DIR_OUTPUT, 0, NULL, EC_WD_DISABLE },
+    { 1, EC_DIR_INPUT, 0, NULL, EC_WD_DISABLE },
+    { 2, EC_DIR_OUTPUT, 1, device2_pdos + 0, EC_WD_ENABLE },
+    { 3, EC_DIR_INPUT, 1, device2_pdos + 1, EC_WD_DISABLE },
     { 0xFF }
 };
 
@@ -362,6 +391,12 @@ void cyclic_task() {
             }
         }
         
+        // 写入夹爪IO数据
+        if (gripper_action_req) {
+            EC_WRITE_S32(domain1_pd + offset.io_out, gripper_io_data);
+            gripper_action_req = false;
+        }
+        
         // 3. 时钟同步
         if (sync_ref_counter) {
             sync_ref_counter--;
@@ -463,13 +498,24 @@ int StartEC() {
 
     // 配置从站
     for (int i = 0; i < num_; i++) {
-        if (!(sc[i] = ecrt_master_slave_config(master, a[i], p[i], VID_PID))) {
-            fprintf(stderr, "获取从站 %d 配置失败.\n", i);
-            return -1;
-        }
-        if (ecrt_slave_config_pdos(sc[i], EC_END, device_syncs)) {
-            fprintf(stderr, "配置从站 %d PDO 失败.\n", i);
-            return -1;
+        if (i < 6) {
+            if (!(sc[i] = ecrt_master_slave_config(master, a[i], p[i], VID_PID))) {
+                fprintf(stderr, "获取伺服从站 %d 配置失败.\n", i);
+                return -1;
+            }
+            if (ecrt_slave_config_pdos(sc[i], EC_END, device_syncs)) {
+                fprintf(stderr, "配置伺服从站 %d PDO 失败.\n", i);
+                return -1;
+            }
+        } else {
+            if (!(sc[i] = ecrt_master_slave_config(master, a[i], p[i], VID_PID2))) {
+                fprintf(stderr, "获取IO从站 %d 配置失败.\n", i);
+                return -1;
+            }
+            if (ecrt_slave_config_pdos(sc[i], EC_END, device2_syncs)) {
+                fprintf(stderr, "配置IO从站 %d PDO 失败.\n", i);
+                return -1;
+            }
         }
     }
     printf("成功配置从站 PDO!\n");
@@ -481,7 +527,7 @@ int StartEC() {
     }
 
     // 配置分布式时钟 (DC)
-    for (int i = 0; i < num_; i++) {
+    for (int i = 0; i < 6; i++) {
         ecrt_slave_config_dc(sc[i], 0x0300, PERIOD_NS, PERIOD_NS / 2, 0, 0);
     }
 
