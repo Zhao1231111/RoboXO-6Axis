@@ -55,7 +55,7 @@ void run_task_state_machine() {
     VectorXd position_joint_initial(6);
     get_joint_Position_initial(position_joint_initial);
     cout << "\n[动作 1] 正在复位机器人到初始零点..." << endl;
-    move_home_position(position_joint_initial);
+    move_home_position();
     cout << " -> 已安全回到原位！" << endl;
 
     // ------------------- 2. 移动到白板上方基准点 -------------------
@@ -112,7 +112,7 @@ void run_task_state_machine() {
     } else {
         cout << "\n[严重错误] 机器人向下探测了 100mm 仍未接触到白板，已到达行程极限！" << endl;
         cout << " -> 任务终止，将返回原点..." << endl;
-        move_home_position(position_joint_initial);
+        move_home_position();
         return;
     }
     sleep(1); // 缓冲等待
@@ -140,6 +140,6 @@ void run_task_state_machine() {
     
     // ------------------- 7. 任务完成与复位 -------------------
     cout << "\n[任务完成] 擦除动作结束！正在抬起画笔并返回原点..." << endl;
-    move_home_position(position_joint_initial);
+    move_home_position();
     cout << " -> 机器人已安全归位。所有任务圆满结束！" << endl;
 }

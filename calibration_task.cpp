@@ -12,19 +12,19 @@ void run_calibration_task() {
     }
     cout << "[标定任务] 伺服上电完成！" << endl;
 
-    cout << "打开夹爪" << endl;
-    set_gripper(true);
-    usleep(50000);
+    // cout << "打开夹爪" << endl;
+    // set_gripper(true);
+    // usleep(1000000);
 
-    cout << "闭合夹爪" << endl;
-    set_gripper(false);
+    // cout << "闭合夹爪" << endl;
+    // set_gripper(false);
 
     // // ------------------- 0.回到原位 -------------------
-    // VectorXd position_joint_initial(6);
-    // get_joint_Position_initial(position_joint_initial);
-    // cout << "\n[动作 0] 正在复位机器人到初始零点..." << endl;
-    // move_home_position(position_joint_initial);
-    // cout << " -> 已安全回到原位！" << endl;
+    VectorXd position_joint_initial(6);
+    get_joint_Position_initial(position_joint_initial);
+    cout << "\n[动作 0] 正在复位机器人到初始零点..." << endl;
+    move_home_position();
+    cout << " -> 已安全回到原位！" << endl;
 
     // // ------------------- 1. 移动到初始点 -------------------
     // cout << "\n[动作 1] 正在移动到默认基准点..." << endl;

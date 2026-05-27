@@ -7,8 +7,13 @@ using namespace std;
 
 double single_joint_test[6] = {0,0,0,0,0,0};
 
-void move_home_position(VectorXd origin_point_joint_test)   
+void move_home_position()   
 {
+    VectorXd origin_point_joint_test(6);
+    for (int i = 0; i < 6; i++) {
+        origin_point_joint_test(i) = g_general_6s->getActPositionAngle(i);
+    }
+
     VectorXd target_point_joint_test(6);         // 目标位置,角度制
     VectorXd velocity_current_joint_test(6);	 // 当前速度,角度制
     VectorXd acceleration_current_joint_test(6); // 当前加速度,角度制

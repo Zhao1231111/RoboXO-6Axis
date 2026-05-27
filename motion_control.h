@@ -24,9 +24,8 @@ extern bool touch_detected;
 
 /**
  * @brief 将机器人的各个关节移动到初始（零点）位置，并阻塞等待直至完成
- * @param origin_point_joint_test 目标零点角度，默认为全零
  */
-void move_home_position(VectorXd origin_point_joint_test = VectorXd::Zero(6));
+void move_home_position();
 
 /**
  * @brief 多关节联合移动测试，包含简单的控制和运行状态监控，运动数据会被记录到文件中
