@@ -2,6 +2,8 @@
 #include <sstream>
 #include <vector>
 
+extern void get_joint_Position_initial(VectorXd &position_current_angle);
+
 void run_calibration_task() {
     // ------------------- 初始化与上电阶段 -------------------
     cout << "\n[标定任务] 正在检查使能状态..." << endl;
@@ -10,12 +12,18 @@ void run_calibration_task() {
     }
     cout << "[标定任务] 伺服上电完成！" << endl;
 
+    VectorXd position_joint_initial(6);
+    get_joint_Position_initial(position_joint_initial);
+    cout << "\n[动作 1] 正在复位机器人到初始零点..." << endl;
+    move_home_position(position_joint_initial);
+    cout << " -> 已安全回到原位！" << endl;
+
     // ------------------- 1. 移动到初始点 -------------------
     cout << "\n[动作 1] 正在移动到默认基准点..." << endl;
     
     // 设定默认初始坐标 (为了保持一致，采用与原任务相似的坐标)
     VectorXd target_cartesian_base(6);
-    target_cartesian_base << 0.5, 0.0, 0.3, 0.0, 0.0, 0.0;
+    target_cartesian_base << 500, 0.0, 400, 3.14159, 0.0, 0.0;
     
     // 阻塞式移动到起始点
     ptp_motion_to_cartesian_base(target_cartesian_base);
@@ -53,7 +61,7 @@ void run_calibration_task() {
             continue;
         }
 
-        double distance = 1.0; // 默认距离 1.0
+        double distance = 50.0; // 默认距离 50 mm
         if (!ss.eof()) {
             double parsed_dist;
             if (ss >> parsed_dist) {

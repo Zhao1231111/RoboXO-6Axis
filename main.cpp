@@ -19,6 +19,9 @@
 using namespace Eigen;
 using namespace std;
 
+// --- 夹爪长度 ---
+int L = 160; // 单位：毫米
+
 // --- 接触检测相关的全局变量定义 ---
 bool is_touch_probing = false;       // 标志位：是否正在进行下探检测
 bool touch_detected = false;         // 标志位：是否已检测到接触
@@ -297,7 +300,6 @@ void cyclic_task() {
             counter--;
         } else {
             counter = FREQUENCY * 2;
-            printf("当前编码器值(Inc): %d %d %d %d %d %d \n", actualInc[0], actualInc[1], actualInc[2], actualInc[3], actualInc[4], actualInc[5]);
             check_master_state();
             
             for (int i = 0; i < num_; i++) {
@@ -386,7 +388,7 @@ void test_robot_func() {
     dh_example.alpha[0] = M_PI * 90 / 180; dh_example.alpha[1] = M_PI * 0 / 180; dh_example.alpha[2] = M_PI * 90 / 180;
     dh_example.alpha[3] = M_PI * 90 / 180; dh_example.alpha[4] = M_PI * (-90) / 180; dh_example.alpha[5] = M_PI * 0 / 180;
     dh_example.d[0] = 390; dh_example.d[1] = 0.4997; dh_example.d[2] = 0.0;
-    dh_example.d[3] = 470.557; dh_example.d[4] = 0.0; dh_example.d[5] = 123; 
+    dh_example.d[3] = 470.557; dh_example.d[4] = 0.0; dh_example.d[5] = 123 + L; 
     dh_example.theta[0] = M_PI * 0 / 180; dh_example.theta[1] = M_PI * 90 / 180; dh_example.theta[2] = M_PI * 0 / 180;
     dh_example.theta[3] = M_PI * 0 / 180; dh_example.theta[4] = M_PI * 90 / 180; dh_example.theta[5] = M_PI * 0 / 180;
 
