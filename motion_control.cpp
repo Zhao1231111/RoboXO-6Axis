@@ -134,6 +134,17 @@ void multi_joint_move_test() {
     fclose(outFile1);
     fclose(outFile3);
     cout << "数据存储完成!" << endl;
+
+    // --- 阻塞等待机制 ---
+    // 1. 如果当前处于未上电状态，等待底层 EtherCAT 线程完成上电初始化
+    while (!PowerStatus) {
+        usleep(50000);
+    }
+    // 2. 上电完成后，等待轨迹被完全消耗完毕
+    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
+        usleep(50000); 
+    }
+
 }
 
 VectorXd lining_motion_test(double x,double y,double z,VectorXd origin_point_angle_degree,VectorXd origin_point_cartesian_coordinate,VectorXd &target_point_joint_test,VectorXd &target_point_cartesian_coordinate)
@@ -168,14 +179,20 @@ VectorXd lining_motion_test(double x,double y,double z,VectorXd origin_point_ang
     if (!PowerStatus)    // 判断使能状态
         NeedPowerOn = 1; // 开启使能
 
-    for (int i = 0; i < trajectory_line.size(); i++) 
-    {
-        std::cout<<trajectory_line[i]<<" ";
-        if(i%6==5)
-        printf("\n");
-    }
+
     // 插补轨迹写入运动队列
     g_general_6s->add_angle_deque(trajectory_line); 
+
+        // --- 阻塞等待机制 ---
+    // 1. 如果当前处于未上电状态，等待底层 EtherCAT 线程完成上电初始化
+    while (!PowerStatus) {
+        usleep(50000);
+    }
+    // 2. 上电完成后，等待轨迹被完全消耗完毕
+    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
+        usleep(50000); 
+    }
+
     
     return target_point_cartesian_coordinate;
 }
@@ -217,6 +234,30 @@ VectorXd downward_probe_motion(double z_offset, VectorXd origin_point_angle_degr
 
     // 插补轨迹写入运动队列
     g_general_6s->add_angle_deque(trajectory_line); 
+
+    // --- 智能条件阻塞等待机制 ---
+    // 1. 如果当前处于未上电状态，等待底层 EtherCAT 线程完成上电初始化
+    while (!PowerStatus) {
+        usleep(50000);
+    }
+    
+    // 开启碰撞检测标志，通知实时线程开始检测力矩
+    is_touch_probing = true;
+    touch_detected = false;
+
+    // 2. 上电完成后，等待轨迹被完全消耗完毕，或直到检测到力矩突变！
+    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
+        if (touch_detected) {
+            std::cout << "\n[底层运动控制] 触发力矩检测！紧急停止当前动作，截断剩余轨迹。" << std::endl;
+            g_general_6s->get_angle_deque().clear(); // 关键：清空队列，让机器人立刻停下！
+            break;
+        }
+        usleep(10000); // 10ms 循环检查
+    }
+    
+    // 动作结束（无论是撞到停下还是走完停下），关闭检测标志
+    is_touch_probing = false;
+
     
     return target_point_cartesian_coordinate;
 }
@@ -256,6 +297,15 @@ void joint_motion_test(VectorXd joint_angles_degree_offset,VectorXd origin_point
     
     // 插补轨迹写入运动队列
     g_general_6s->add_angle_deque(trajectory_joint_test); 
+
+    // --- 阻塞等待机制 ---
+    while (!PowerStatus) {
+        usleep(50000);
+    }
+    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
+        usleep(50000); 
+    }
+
     return ;
 }
 
@@ -281,4 +331,11 @@ void ptp_motion_to_cartesian_base(VectorXd target_cartesian_base) {
     
     if (!PowerStatus) NeedPowerOn = true;
     g_general_6s->add_angle_deque(trajectory);
+
+    while (!PowerStatus) {
+        usleep(50000);
+    }
+    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
+        usleep(50000); 
+    }
 }

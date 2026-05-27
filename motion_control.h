@@ -19,6 +19,8 @@ extern std::deque<double> angle_deque_out;
 extern std::deque<int> tor_deque_out;
 
 extern double single_joint_test[6];
+extern bool is_touch_probing;
+extern bool touch_detected;
 
 /**
  * @brief 将机器人的各个关节移动到初始（零点）位置，并阻塞等待直至完成
@@ -61,7 +63,7 @@ VectorXd downward_probe_motion(double z_offset, VectorXd origin_point_angle_degr
 void joint_motion_test(VectorXd joint_angles_degree_offset, VectorXd origin_point_joint_test, VectorXd &target_point_joint_test, VectorXd &target_point_cartesian_test);
 
 /**
- * @brief 阻塞式 PTP (Point-to-Point) 插补运动，通过给定的基座系笛卡尔坐标直接控制移动
+ * @brief PTP (Point-to-Point) 插补运动，通过给定的基座系笛卡尔坐标直接控制移动
  * @param target_cartesian_base 目标笛卡尔坐标系位姿
  */
 void ptp_motion_to_cartesian_base(VectorXd target_cartesian_base);

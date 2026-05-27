@@ -17,6 +17,7 @@ set(SOURCES
     general_6s.cpp
     probe_detect_tasks.cpp
     motion_control.cpp
+    calibration_task.cpp
 )
 
 # 生成可执行文件
