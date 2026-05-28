@@ -18,6 +18,7 @@ set(SOURCES
     probe_detect_tasks.cpp
     motion_control.cpp
     calibration_task.cpp
+    chessboard_tasks.cpp
 )
 
 # 生成可执行文件

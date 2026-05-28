@@ -15,6 +15,7 @@
 #include "ecrt.h"
 #include "probe_detect_tasks.h" // 引入任务声明
 #include "calibration_task.h" 
+#include "chessboard_tasks.h"
 
 using namespace Eigen;
 using namespace std;
@@ -481,6 +482,7 @@ void test_robot_func() {
     // multi_joint_move_test(); // 原来的调用方式
     run_task_state_machine(); // 新的任务状态机调用
     // run_calibration_task();
+    // draw_tic_tac_toe_task();
 }
 
 // --- 启动 EtherCAT 主站 ---
