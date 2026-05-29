@@ -97,4 +97,8 @@ void set_gripper(bool open);
  */
 void grasp_object(VectorXd target_point_cartesian, double drop_height);
 
+void grasp_pen(VectorXd target_point_cartesian, double &out_z_height);
+
+void grasp_eraser(VectorXd target_point_cartesian, double &out_z_height);
+
 #endif // MOTION_CONTROL_H

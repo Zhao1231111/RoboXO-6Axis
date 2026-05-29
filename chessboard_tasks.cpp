@@ -199,23 +199,14 @@ void draw_tic_tac_toe_task() {
     // 3. 开始执行
     cout << "\n[动作 1] 复位..." << endl;
     move_home_position();
-    
-    cout << "\n[动作 2] 移动到棋盘中心上方..." << endl;
-    VectorXd top_center = board_center_cartesian;
-    top_center(2) += BOARD_PEN_LIFT_MM + 100; // original: 70
-    ptp_motion_to_cartesian_base(top_center);
 
-    // 抓取物体
-    grasp_object(top_center, BOARD_PEN_LIFT_MM + 40); // original: 75
-
-    // 智能下探与按压
-    double probed_z = board_center_cartesian(2);
-    if (!probe_and_press(100, probed_z)) {
-        return; // 如果探测失败，则直接退出任务
-    }
+    // 抓取画笔
+    // double pen_z = board_center_cartesian(2);
+    // grasp_pen(board_center_cartesian, pen_z);
     
-    // 更新棋盘中心坐标（使后续所有绘图都基于刚刚检测到的实际接触高度）
-    board_center_cartesian(2) = probed_z;
+    
+    // // 更新棋盘中心坐标（使后续所有绘图都基于刚刚检测到的实际接触高度）
+    // board_center_cartesian(2) = pen_z;
     
     // 画棋盘
     // draw_chessboard(board_center_cartesian);
@@ -226,8 +217,26 @@ void draw_tic_tac_toe_task() {
     // draw_x(board_center_cartesian, 0);
     // move_home_position();
     
-    draw_o(board_center_cartesian, 4);
-    move_home_position();
+    // draw_o(board_center_cartesian, 4);
+    // move_home_position();
+
+    double eraser_z = board_center_cartesian(2);
+    grasp_eraser(board_center_cartesian, eraser_z);
+    
+    // 更新棋盘中心坐标（使后续所有绘图都基于刚刚检测到的实际接触高度）
+    board_center_cartesian(2) = eraser_z;
+
+    cout << "\n[动作 5] 开始执行擦除动作..." << endl;
+    VectorXd origin_point_joint(6);
+    for (int i = 0; i < 6; i++) origin_point_joint(i) = g_general_6s->getActPositionAngle(i);
+    MatrixXd trans_matrix;
+    g_general_6s->calc_forward_kin(origin_point_joint, trans_matrix);
+    VectorXd origin_cartesian = g_general_6s->tr_2_MCS(trans_matrix);
+    
+    VectorXd wipe_joint_target(6);
+    VectorXd wipe_cartesian_target(6);
+    // 在当前 X 轴方向平移 100mm (0.1m)
+    lining_motion_test(100.0, 0.0, 0.0, origin_point_joint, origin_cartesian, wipe_joint_target, wipe_cartesian_target);
     
     // draw_x(board_center_cartesian, 8);
     // move_home_position();

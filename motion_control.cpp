@@ -1,4 +1,5 @@
 #include "motion_control.h"
+#include "probe_detect_tasks.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -439,4 +440,34 @@ void grasp_object(VectorXd target_point_cartesian, double drop_height) {
     // ptp_motion_to_cartesian_base(target_point_cartesian);
 
     cout << "[抓取流程] 抓取动作执行完毕！" << endl;
+}
+
+void grasp_pen(VectorXd target_point_cartesian, double &out_z_height){
+    cout << "\n 移动到马克笔中心上方..." << endl;
+    VectorXd top_center = target_point_cartesian;
+    top_center(2) += 120; // original: 70
+    ptp_motion_to_cartesian_base(top_center);
+
+    // 抓取物体
+    grasp_object(top_center, 60); // original: 75
+
+    // 智能下探与按压
+    if (!probe_and_press(100, out_z_height)) {
+        return; // 如果探测失败，则直接退出任务
+    }
+}
+
+void grasp_eraser(VectorXd target_point_cartesian, double &out_z_height){
+    cout << "\n 移动到橡皮中心上方..." << endl;
+    VectorXd top_center = target_point_cartesian;
+    top_center(2) += 90; // original: 70
+    ptp_motion_to_cartesian_base(top_center);
+
+    // 抓取物体
+    grasp_object(top_center, 95); // original: 75
+
+    // 智能下探与按压
+    if (!probe_and_press(100, out_z_height)) {
+        return; // 如果探测失败，则直接退出任务
+    }
 }
