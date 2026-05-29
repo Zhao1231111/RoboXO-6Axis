@@ -15,6 +15,7 @@
 #include "ecrt.h"
 #include "probe_detect_tasks.h" // 引入任务声明
 #include "calibration_task.h" 
+#include "chessboard_tasks.h"
 
 using namespace Eigen;
 using namespace std;
@@ -381,12 +382,13 @@ void cyclic_task() {
             // --- 接触检测逻辑 ---
             if (is_touch_probing && !touch_detected) {
                 // 判断 J2(i=1) 或 J3(i=2) 是否受力突变
-                if (abs(actualtor[1] - baseline_tor[1]) > TORQUE_THRESHOLD || 
+                if (abs(actualtor[1] - baseline_tor[1]) > 1.5 * TORQUE_THRESHOLD || 
                     abs(actualtor[2] - baseline_tor[2]) > TORQUE_THRESHOLD) {
                     trigger_tor_1 = actualtor[1];
                     trigger_tor_2 = actualtor[2];
                     touch_detected = true;
-                    // 在 EtherCAT 线程中发现接触，应用层将捕获这个标志位并清空队列
+                    // 在 EtherCAT 线程内部清空队列，保证线程安全，防止 double free！
+                    g_general_6s->get_angle_deque().clear();
                 }
             }
         }
@@ -480,6 +482,7 @@ void test_robot_func() {
     // multi_joint_move_test(); // 原来的调用方式
     run_task_state_machine(); // 新的任务状态机调用
     // run_calibration_task();
+    // draw_tic_tac_toe_task();
 }
 
 // --- 启动 EtherCAT 主站 ---
