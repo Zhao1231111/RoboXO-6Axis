@@ -382,7 +382,7 @@ void cyclic_task() {
             // --- 接触检测逻辑 ---
             if (is_touch_probing && !touch_detected) {
                 // 判断 J2(i=1) 或 J3(i=2) 是否受力突变
-                if (abs(actualtor[1] - baseline_tor[1]) > TORQUE_THRESHOLD || 
+                if (abs(actualtor[1] - baseline_tor[1]) > 1.5 * TORQUE_THRESHOLD || 
                     abs(actualtor[2] - baseline_tor[2]) > TORQUE_THRESHOLD) {
                     trigger_tor_1 = actualtor[1];
                     trigger_tor_2 = actualtor[2];
