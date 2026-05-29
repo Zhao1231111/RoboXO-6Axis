@@ -202,6 +202,61 @@ VectorXd lining_motion_test(double x,double y,double z,VectorXd origin_point_ang
     return target_point_cartesian_coordinate;
 }
 
+VectorXd circle_motion_test(double mid_x, double mid_y, double mid_z,
+                            double target_x, double target_y, double target_z,
+                            VectorXd origin_point_angle_degree,
+                            VectorXd origin_point_cartesian_coordinate,
+                            VectorXd &target_point_joint_test,
+                            VectorXd &target_point_cartesian_coordinate)
+{
+    double velocity_current_rectangular = 0.0;
+    double acceleration_current_rectangular = 0.0;
+
+    VectorXd mid_point_cartesian_coordinate(6);
+    mid_point_cartesian_coordinate(0) = origin_point_cartesian_coordinate[0] + mid_x;
+    mid_point_cartesian_coordinate(1) = origin_point_cartesian_coordinate[1] + mid_y;
+    mid_point_cartesian_coordinate(2) = origin_point_cartesian_coordinate[2] + mid_z;
+    mid_point_cartesian_coordinate(3) = origin_point_cartesian_coordinate[3];
+    mid_point_cartesian_coordinate(4) = origin_point_cartesian_coordinate[4];
+    mid_point_cartesian_coordinate(5) = origin_point_cartesian_coordinate[5];
+
+    target_point_cartesian_coordinate(0) = origin_point_cartesian_coordinate[0] + target_x;
+    target_point_cartesian_coordinate(1) = origin_point_cartesian_coordinate[1] + target_y;
+    target_point_cartesian_coordinate(2) = origin_point_cartesian_coordinate[2] + target_z;
+    target_point_cartesian_coordinate(3) = origin_point_cartesian_coordinate[3];
+    target_point_cartesian_coordinate(4) = origin_point_cartesian_coordinate[4];
+    target_point_cartesian_coordinate(5) = origin_point_cartesian_coordinate[5];
+
+    MatrixXd trans_matrix = g_general_6s->rpy_2_tr(target_point_cartesian_coordinate);
+    g_general_6s->calc_inverse_kin(trans_matrix, origin_point_angle_degree, target_point_joint_test);
+
+    double Ts_joint = 0.001;
+    double maxVelocityLimit = 50;
+    double maxAccelerationLimit = 200;
+    double maxDecelerationLimit = -200;
+    double maxJerkLimit = 50;
+
+    std::deque<double> trajectory_circle;
+    g_general_6s->move_circle_interp(target_point_cartesian_coordinate, mid_point_cartesian_coordinate,
+        origin_point_cartesian_coordinate, origin_point_angle_degree, velocity_current_rectangular,
+        acceleration_current_rectangular, Ts_joint, maxVelocityLimit, maxAccelerationLimit,
+        maxDecelerationLimit, maxJerkLimit, trajectory_circle);
+
+    if (!PowerStatus)
+        NeedPowerOn = 1;
+
+    g_general_6s->add_angle_deque(trajectory_circle);
+
+    while (!PowerStatus) {
+        usleep(50000);
+    }
+    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
+        usleep(50000);
+    }
+
+    return target_point_cartesian_coordinate;
+}
+
 // 专门用于极缓慢下探的直线插补函数
 VectorXd downward_probe_motion(double z_offset, VectorXd origin_point_angle_degree, VectorXd origin_point_cartesian_coordinate)
 {

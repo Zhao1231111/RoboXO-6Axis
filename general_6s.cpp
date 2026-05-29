@@ -604,6 +604,240 @@ void General_6S::move_line_interp(const VectorXd &targetPoint,
 	return;
 }
 
+void General_6S::move_circle_interp(const VectorXd &targetPoint, const VectorXd &midPoint,
+		const VectorXd &originPoint, const VectorXd &originACS, double velCurrent, double accCurrent,
+		double Ts, double maxVelper, double maxAccper, double maxDecelper,
+		double maxJerk, std::deque<double> &deque)
+{
+	int n = 6;
+	int mcsDimension = 6;
+
+	Vector3d pOrigin = originPoint.head(3);
+	Vector3d pMid = midPoint.head(3);
+	Vector3d pTarget = targetPoint.head(3);
+	Vector3d v1 = pMid - pOrigin;
+	Vector3d v2 = pTarget - pOrigin;
+	Vector3d normal = v1.cross(v2);
+	double normalNorm = normal.norm();
+
+	if (v2.norm() < 0.0001 && v1.norm() >= 0.0001)
+	{
+		Vector3d center = (pOrigin + pMid) / 2.0;
+		double radius = (pOrigin - pMid).norm() / 2.0;
+		Vector3d ex = (pOrigin - center).normalized();
+		Matrix3d originRot = rpy_2_r(originPoint.segment(3,3));
+		Vector3d ez = originRot.col(2).normalized();
+		Vector3d ey = ez.cross(ex);
+
+		if (ey.norm() < 0.0001)
+		{
+			ez = originRot.col(1).normalized();
+			ey = ez.cross(ex);
+		}
+		if (radius < 0.0001 || ey.norm() < 0.0001)
+		{
+			return;
+		}
+		ey.normalize();
+
+		double arcLength = 2.0 * M_PI * radius;
+		if (sqrt(maxAccper * arcLength) < (0.98 * maxVelper))
+		{
+			for (int i = 0; i < 1000; i++)
+			{
+				maxVelper = 0.98 * maxVelper;
+				maxAccper = 0.98 * maxAccper;
+				maxDecelper = 0.98 * maxDecelper;
+				if (sqrt(maxAccper * arcLength) >= maxVelper)
+				{
+					break;
+				}
+			}
+		}
+
+		std::deque<double> rlst;
+		calc_Interp_5_1_5(0, 1, Ts, maxVelper / arcLength, maxAccper / arcLength,
+				maxDecelper / arcLength, maxJerk / arcLength, rlst, velCurrent / arcLength, accCurrent / arcLength);
+
+		Matrix3d mOrigin = rpy_2_r(originPoint.segment(3,3));
+		Matrix3d mTarget = rpy_2_r(targetPoint.segment(3,3));
+		Quaternion<double> qOrigin(mOrigin);
+		Quaternion<double> qTarget(mTarget);
+		Quaternion<double> qr;
+
+		MatrixXd Tr(4, 4);
+		VectorXd posr(mcsDimension);
+		VectorXd posACS(n);
+		VectorXd pLast(n);
+
+		for (std::deque<double>::iterator rit = rlst.begin(); rit != rlst.end(); ++rit)
+		{
+			double r = *rit;
+			double theta = 2.0 * M_PI * r;
+			Vector3d pr = center + radius * cos(theta) * ex + radius * sin(theta) * ey;
+
+			qr = qOrigin.slerp(r, qTarget);
+			Tr << qr.toRotationMatrix(), pr, MatrixXd::Zero(1, 3), 1;
+			posr.head(6) << tr_2_MCS(Tr);
+
+			if (rit == rlst.begin())
+			{
+				pLast = originACS;
+			}
+			calc_inverse_kin(rpy_2_tr(posr), pLast, posACS);
+
+			for (int ai = 0; ai != n; ++ai)
+			{
+				deque.push_back(posACS[ai]);
+			}
+			pLast = posACS;
+		}
+		return;
+	}
+
+	if (v1.norm() < 0.0001 || v2.norm() < 0.0001 || normalNorm < 0.0001)
+	{
+		move_line_interp(targetPoint, originPoint, originACS, velCurrent, accCurrent,
+				Ts, maxVelper, maxAccper, maxDecelper, maxJerk, deque);
+		return;
+	}
+
+	Vector3d ex = v2.normalized();
+	Vector3d ez = normal.normalized();
+	Vector3d ey = ez.cross(ex);
+	double targetX = v2.norm();
+	double midX = v1.dot(ex);
+	double midY = v1.dot(ey);
+
+	if (fabs(midY) < 0.0001)
+	{
+		move_line_interp(targetPoint, originPoint, originACS, velCurrent, accCurrent,
+				Ts, maxVelper, maxAccper, maxDecelper, maxJerk, deque);
+		return;
+	}
+
+	double centerX = targetX / 2.0;
+	double centerY = (midX * midX + midY * midY - targetX * midX) / (2.0 * midY);
+	Vector2d center2d(centerX, centerY);
+	double radius = center2d.norm();
+
+	if (radius < 0.0001)
+	{
+		return;
+	}
+
+	double thetaStart = atan2(-centerY, -centerX);
+	double thetaMid = atan2(midY - centerY, midX - centerX);
+	double thetaEnd = atan2(-centerY, targetX - centerX);
+	double deltaEnd = thetaEnd - thetaStart;
+
+	while (deltaEnd <= -M_PI)
+	{
+		deltaEnd += 2.0 * M_PI;
+	}
+	while (deltaEnd > M_PI)
+	{
+		deltaEnd -= 2.0 * M_PI;
+	}
+
+	auto is_angle_on_arc = [](double start, double angle, double delta) {
+		double rel = angle - start;
+		if (delta >= 0.0)
+		{
+			while (rel < 0.0)
+			{
+				rel += 2.0 * M_PI;
+			}
+			while (rel >= 2.0 * M_PI)
+			{
+				rel -= 2.0 * M_PI;
+			}
+			return rel <= delta;
+		}
+		while (rel > 0.0)
+		{
+			rel -= 2.0 * M_PI;
+		}
+		while (rel <= -2.0 * M_PI)
+		{
+			rel += 2.0 * M_PI;
+		}
+		return rel >= delta;
+	};
+
+	bool useLongArc = !is_angle_on_arc(thetaStart, thetaMid, deltaEnd);
+	if (useLongArc)
+	{
+		if (deltaEnd > 0.0)
+		{
+			deltaEnd -= 2.0 * M_PI;
+		}
+		else
+		{
+			deltaEnd += 2.0 * M_PI;
+		}
+	}
+
+	double arcLength = fabs(deltaEnd) * radius;
+	if (arcLength < 0.0001)
+	{
+		return;
+	}
+
+	if (sqrt(maxAccper * arcLength) < (0.98 * maxVelper))
+	{
+		for (int i = 0; i < 1000; i++)
+		{
+			maxVelper = 0.98 * maxVelper;
+			maxAccper = 0.98 * maxAccper;
+			maxDecelper = 0.98 * maxDecelper;
+			if (sqrt(maxAccper * arcLength) >= maxVelper)
+			{
+				break;
+			}
+		}
+	}
+
+	std::deque<double> rlst;
+	calc_Interp_5_1_5(0, 1, Ts, maxVelper / arcLength, maxAccper / arcLength,
+			maxDecelper / arcLength, maxJerk / arcLength, rlst, velCurrent / arcLength, accCurrent / arcLength);
+
+	Matrix3d mOrigin = rpy_2_r(originPoint.segment(3,3));
+	Matrix3d mTarget = rpy_2_r(targetPoint.segment(3,3));
+	Quaternion<double> qOrigin(mOrigin);
+	Quaternion<double> qTarget(mTarget);
+	Quaternion<double> qr;
+
+	MatrixXd Tr(4, 4);
+	VectorXd posr(mcsDimension);
+	VectorXd posACS(n);
+	VectorXd pLast(n);
+
+	for (std::deque<double>::iterator rit = rlst.begin(); rit != rlst.end(); ++rit)
+	{
+		double r = *rit;
+		double theta = thetaStart + deltaEnd * r;
+		Vector3d pr = pOrigin + ex * (centerX + radius * cos(theta)) + ey * (centerY + radius * sin(theta));
+
+		qr = qOrigin.slerp(r, qTarget);
+		Tr << qr.toRotationMatrix(), pr, MatrixXd::Zero(1, 3), 1;
+		posr.head(6) << tr_2_MCS(Tr);
+
+		if (rit == rlst.begin())
+		{
+			pLast = originACS;
+		}
+		calc_inverse_kin(rpy_2_tr(posr), pLast, posACS);
+
+		for (int ai = 0; ai != n; ++ai)
+		{
+			deque.push_back(posACS[ai]);
+		}
+		pLast = posACS;
+	}
+	return;
+}
+
 MatrixXd General_6S::rpy_2_tr(VectorXd posMCS)  //直角坐标转转移矩阵
 {
 	MatrixXd tr(4, 4);
@@ -738,6 +972,3 @@ void General_6S::calc_Interp_5_1_5(double q0, double q1, double Ts,
 	}
 	return;
 }
-
-
-

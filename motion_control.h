@@ -44,6 +44,23 @@ void multi_joint_move_test();
 VectorXd lining_motion_test(double x, double y, double z, VectorXd origin_point_angle_degree, VectorXd origin_point_cartesian_coordinate, VectorXd &target_point_joint_test, VectorXd &target_point_cartesian_coordinate);
 
 /**
+ * @brief 在笛卡尔坐标系下的圆弧插补运动，基于当前位姿和两个相对点三点定圆弧
+ * @param mid_x, mid_y, mid_z 圆弧中间点相对起点的偏移量
+ * @param target_x, target_y, target_z 圆弧终点相对起点的偏移量
+ * @param origin_point_angle_degree 起点关节角度
+ * @param origin_point_cartesian_coordinate 起点笛卡尔位姿
+ * @param target_point_joint_test 返回：终点的关节角度
+ * @param target_point_cartesian_coordinate 返回：终点的笛卡尔位姿
+ * @return 计算得到的终点笛卡尔位姿
+ */
+VectorXd circle_motion_test(double mid_x, double mid_y, double mid_z,
+                            double target_x, double target_y, double target_z,
+                            VectorXd origin_point_angle_degree,
+                            VectorXd origin_point_cartesian_coordinate,
+                            VectorXd &target_point_joint_test,
+                            VectorXd &target_point_cartesian_coordinate);
+
+/**
  * @brief 专门用于慢速下探的直线运动函数，保证检测精度
  * @param z_offset Z轴下探深度偏移量
  * @param origin_point_angle_degree 起点关节角度

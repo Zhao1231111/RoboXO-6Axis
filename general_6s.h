@@ -55,6 +55,25 @@ public:
 			double Ts, double maxVelL, double maxAccL, double maxDecelL,
 			double maxJerk, std::deque<double> &nAglSeqPtr);
 	/**
+	* @brief 机器人圆弧运动插补，三点定圆弧，姿态从起点到终点球面线性插补
+	* @param targetPoint 终点直角位置
+	* @param midPoint 圆弧经过的中间点直角位置
+	* @param originPoint 起始点直角位置
+	* @param originACS 起始点关节位置
+	* @param velCurrent 起始点速度
+	* @param accCurrent 起始点加速度
+	* @param Ts 插补周期
+	* @param maxVelL 最大圆弧速度
+	* @param maxAccL 最大圆弧加速度
+	* @param maxDecelL 最大圆弧减速度
+	* @param maxJerk 最大雅可比速度
+	* @param nAglSeqPtr 插补得到的队列
+	*/
+	virtual void move_circle_interp(const VectorXd &targetPoint, const VectorXd &midPoint,
+			const VectorXd &originPoint, const VectorXd &originACS, double velCurrent, double accCurrent,
+			double Ts, double maxVelL, double maxAccL, double maxDecelL,
+			double maxJerk, std::deque<double> &nAglSeqPtr);
+	/**
 	* @brief 转移矩阵转直角坐标
 	* @param m 转移矩阵
 	* @return 返回六维直角坐标值
