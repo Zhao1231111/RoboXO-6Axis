@@ -90,4 +90,11 @@ void ptp_motion_to_cartesian_base(VectorXd target_cartesian_base);
  */
 void set_gripper(bool open);
 
+/**
+ * @brief 执行抓取物体的全套动作：PTP到目标点 -> 张开夹爪 -> 下降 -> 闭合夹爪 -> 上升
+ * @param target_point_cartesian 安全位置（物体正上方）的笛卡尔坐标
+ * @param drop_height 抓取时需要下降的高度偏移量（mm）
+ */
+void grasp_object(VectorXd target_point_cartesian, double drop_height);
+
 #endif // MOTION_CONTROL_H

@@ -141,7 +141,7 @@ void draw_o(const VectorXd &board_center_cartesian,
                    double board_size,
                    double pen_lift,
                    int segments) {
-    if (segments < 12) segments = 12;
+    (void)segments;
 
     const VectorXd cell_center = get_cell_center_cartesian(board_center_cartesian, board_size, cell_index);
     const double cell = board_size / 3.0;
@@ -157,17 +157,13 @@ void draw_o(const VectorXd &board_center_cartesian,
     // 移到起点并下放
     move_pen_to_xy_without_drawing(start_x, start_y, z, pen_lift, board_center_cartesian);
 
-    for (int i = 1; i <= segments; ++i) {
-        const double theta = 2.0 * M_PI * static_cast<double>(i) / static_cast<double>(segments);
-        
-        VectorXd target_cartesian = get_current_cartesian();
-        target_cartesian(0) = cx + radius * cos(theta);
-        target_cartesian(1) = cy + radius * sin(theta);
-        target_cartesian(2) = z;
-        copy_pose_orientation(board_center_cartesian, target_cartesian);
-        
-        ptp_motion_to_cartesian_base(target_cartesian);
-    }
+    VectorXd current_joint = get_current_joint();
+    VectorXd current_cartesian = get_current_cartesian();
+    VectorXd dummy_j(6), dummy_c(6);
+
+    circle_motion_test(-2.0 * radius, 0.0, 0.0,
+                       0.0, 0.0, 0.0,
+                       current_joint, current_cartesian, dummy_j, dummy_c);
 
     lift_pen(z, pen_lift, board_center_cartesian);
 }
@@ -175,7 +171,15 @@ void draw_o(const VectorXd &board_center_cartesian,
 // ======================= 主接口 =======================
 
 void draw_tic_tac_toe_task() {
-    cout << "\n========== 开始绘制井字棋任务 ==========" << endl;
+    cout << "\n========== 开始绘制井字棋任务 ==========" << endl; 
+
+    // ------------------- 初始化与上电阶段 -------------------
+    cout << "\n[任务开始] 正在检查使能状态..." << endl;
+    while (!PowerStatus) {
+        usleep(500000);
+    }
+    cout << "[任务状态] 伺服上电完成！" << endl;
+
 
     // 1. 获取棋盘中心配置（与探测任务共用配置文件 config.txt）
     VectorXd board_center_cartesian(6);
@@ -197,23 +201,26 @@ void draw_tic_tac_toe_task() {
     
     cout << "\n[动作 2] 移动到棋盘中心上方..." << endl;
     VectorXd top_center = board_center_cartesian;
-    top_center(2) += BOARD_PEN_LIFT_MM;
+    top_center(2) += BOARD_PEN_LIFT_MM + 70;
     ptp_motion_to_cartesian_base(top_center);
+
+    // 抓取物体
+    grasp_object(top_center, BOARD_PEN_LIFT_MM + 75); // 垂直下降100mm
     
     // 画棋盘
-    draw_chessboard(board_center_cartesian);
+    // draw_chessboard(board_center_cartesian);
     
-    cout << "\n[动作 3] 回归安全点..." << endl;
-    move_home_position();
+    // cout << "\n[动作 3] 回归安全点..." << endl;
+    // move_home_position();
     
-    draw_x(board_center_cartesian, 0);
-    move_home_position();
+    // draw_x(board_center_cartesian, 0);
+    // move_home_position();
     
     draw_o(board_center_cartesian, 4);
     move_home_position();
     
-    draw_x(board_center_cartesian, 8);
-    move_home_position();
+    // draw_x(board_center_cartesian, 8);
+    // move_home_position();
 
     cout << "\n========== 井字棋任务圆满结束 ==========" << endl;
 }

@@ -417,3 +417,26 @@ void set_gripper(bool open) {
     gripper_action_req = true;
     usleep(500000); // 延时等待气缸动作完成
 }
+
+void grasp_object(VectorXd target_point_cartesian, double drop_height) {
+    cout << "\n[抓取流程] 步骤1：PTP移动到目标正上方安全点..." << endl;
+    ptp_motion_to_cartesian_base(target_point_cartesian);
+
+    cout << "[抓取流程] 步骤2：张开夹爪..." << endl;
+    set_gripper(true);
+    usleep(1000000); // 等待气动夹爪完全张开
+
+    cout << "[抓取流程] 步骤3：垂直下降 " << drop_height << " mm..." << endl;
+    VectorXd down_target = target_point_cartesian;
+    down_target(2) -= drop_height;
+    ptp_motion_to_cartesian_base(down_target);
+
+    cout << "[抓取流程] 步骤4：闭合夹爪，抓取物体..." << endl;
+    set_gripper(false);
+    usleep(1000000); // 等待气动夹爪完全抓稳
+
+    cout << "[抓取流程] 步骤5：垂直上升返回原高度..." << endl;
+    ptp_motion_to_cartesian_base(target_point_cartesian);
+
+    cout << "[抓取流程] 抓取动作执行完毕！" << endl;
+}
