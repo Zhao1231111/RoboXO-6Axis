@@ -3,7 +3,7 @@
 
 #include "motion_control.h"
 #include "general_6s.h"
-#include "eigen/Eigen/Eigen"
+#include <Eigen/Eigen>
 #include <iostream>
 #include <string>
 

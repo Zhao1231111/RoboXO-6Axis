@@ -16,7 +16,7 @@
 // ...\SRC\ 这样写表示，当前目录下  ..\SRC\\ 路径，当然这种写法已经和第一种重叠了。
 // #include "../openRC/project_base/struct_define.h"
 #include "struct_define.h"
-#include "eigen/Eigen/Eigen"
+#include <Eigen/Eigen>
 using namespace Eigen;
 
 #define rad2deg(r) ((r)*180.0/M_PI)
