@@ -279,7 +279,7 @@ VectorXd downward_probe_motion(double z_offset, VectorXd origin_point_angle_degr
     velocity_current_rectangular = 0.0;		  
     acceleration_current_rectangular = 0.0;	  
     double Ts_joint = 0.001;				  
-    double maxVelocityLimit = 10.0;		  // 极低速度 2mm/s
+    double maxVelocityLimit = 2.0;		  // 极低速度 2mm/s
     double maxAccelerationLimit = 10;	  
     double maxDecelerationLimit = -10;	  
     double maxJerkLimit = 10;		  
@@ -435,8 +435,8 @@ void grasp_object(VectorXd target_point_cartesian, double drop_height) {
     set_gripper(false);
     usleep(1000000); // 等待气动夹爪完全抓稳
 
-    cout << "[抓取流程] 步骤5：垂直上升返回原高度..." << endl;
-    ptp_motion_to_cartesian_base(target_point_cartesian);
+    // cout << "[抓取流程] 步骤5：垂直上升返回原高度..." << endl;
+    // ptp_motion_to_cartesian_base(target_point_cartesian);
 
     cout << "[抓取流程] 抓取动作执行完毕！" << endl;
 }

@@ -1,5 +1,6 @@
 #include "chessboard_tasks.h"
 #include "motion_control.h" // 包含所有的运动控制接口
+#include "probe_detect_tasks.h"
 #include <cmath>
 
 extern void load_task_config(VectorXd& board_center, VectorXd& target_point, int& torque_thresh);
@@ -201,11 +202,20 @@ void draw_tic_tac_toe_task() {
     
     cout << "\n[动作 2] 移动到棋盘中心上方..." << endl;
     VectorXd top_center = board_center_cartesian;
-    top_center(2) += BOARD_PEN_LIFT_MM + 70;
+    top_center(2) += BOARD_PEN_LIFT_MM + 100; // original: 70
     ptp_motion_to_cartesian_base(top_center);
 
     // 抓取物体
-    grasp_object(top_center, BOARD_PEN_LIFT_MM + 75); // 垂直下降100mm
+    grasp_object(top_center, BOARD_PEN_LIFT_MM + 40); // original: 75
+
+    // 智能下探与按压
+    double probed_z = board_center_cartesian(2);
+    if (!probe_and_press(100, probed_z)) {
+        return; // 如果探测失败，则直接退出任务
+    }
+    
+    // 更新棋盘中心坐标（使后续所有绘图都基于刚刚检测到的实际接触高度）
+    board_center_cartesian(2) = probed_z;
     
     // 画棋盘
     // draw_chessboard(board_center_cartesian);

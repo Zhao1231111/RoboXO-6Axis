@@ -42,6 +42,62 @@ void get_joint_Position_initial(VectorXd &position_current_angle)
     }
 }
 
+bool probe_and_press(int torque_threshold, double &out_z_height) {
+    cout << "\n[内部标定] 记录当前姿态的基准力矩..." << endl;
+    sleep(1); // 停留1秒，确保机器人完全静止且受力稳定
+    int q_size = tor_deque_out.size();
+    if (q_size >= 6) {
+        for (int i = 0; i < 6; i++) {
+            baseline_tor[i] = tor_deque_out[q_size - 6 + i];
+        }
+    }
+
+    // 将传入的阈值覆盖全局变量，以便 EtherCAT 线程在接触检测时使用
+    TORQUE_THRESHOLD = torque_threshold;
+    // ------------------- 4. 智能缓慢下探与接触检测 -------------------
+    cout << "\n[动作 3] 开始缓慢下探并检测白板碰撞..." << endl;
+    
+    // 获取当前点位
+    VectorXd origin_point_joint(6);
+    for (int i = 0; i < 6; i++) origin_point_joint(i) = g_general_6s->getActPositionAngle(i);
+    MatrixXd trans_matrix;
+    g_general_6s->calc_forward_kin(origin_point_joint, trans_matrix);
+    VectorXd origin_cartesian = g_general_6s->tr_2_MCS(trans_matrix);
+    
+    // 阻塞式下探（内部遇到碰撞会立即清空轨迹并退出）
+    downward_probe_motion(-100, origin_point_joint, origin_cartesian);
+    
+    // 判断下探动作结束的原因
+    if (touch_detected) {
+        cout << "[任务状态] 成功接触白板！机器人已安全停止下探。" << endl;
+        cout << "   - [力矩详情] 阈值设定: " << TORQUE_THRESHOLD << endl;
+        cout << "   - [力矩详情] 基准力矩 J2: " << baseline_tor[1] << " | J3: " << baseline_tor[2] << endl;
+        cout << "   - [力矩详情] 触发力矩 J2: " << trigger_tor_1 << " | J3: " << trigger_tor_2 << endl;
+        cout << "   - [力矩详情] 实际偏差 J2: " << abs(trigger_tor_1 - baseline_tor[1]) 
+             << " | J3: " << abs(trigger_tor_2 - baseline_tor[2]) << endl;
+    } else {
+        cout << "\n[严重错误] 机器人向下探测了 100mm 仍未接触到白板，已到达行程极限！" << endl;
+        cout << " -> 任务终止，将返回原点..." << endl;
+        move_home_position();
+        return false;
+    }
+    sleep(1); // 缓冲等待
+
+    // ------------------- 5. 额外施加下压力 -------------------
+    cout << "\n[动作 4] 施加额外下压 (3mm) 以保证擦拭摩擦力..." << endl;
+    for (int i = 0; i < 6; i++) origin_point_joint(i) = g_general_6s->getActPositionAngle(i);
+    g_general_6s->calc_forward_kin(origin_point_joint, trans_matrix);
+    origin_cartesian = g_general_6s->tr_2_MCS(trans_matrix);
+    
+    VectorXd press_joint_target(6);
+    VectorXd press_cartesian_target(6);
+    lining_motion_test(0.0, 0.0, -1.0, origin_point_joint, origin_cartesian, press_joint_target, press_cartesian_target);
+    
+    // 输出最终压入后的 Z 高度
+    out_z_height = press_cartesian_target(2);
+    
+    return true;
+}
 
 void run_task_state_machine() {
     // ------------------- 初始化与上电阶段 -------------------
@@ -74,7 +130,8 @@ void run_task_state_machine() {
     board_center_base << 0.5, 0.0, 0.3, 0.0, 0.0, 0.0;
     VectorXd target_in_board(6);
     target_in_board << 0.0, 0.0, -0.05, 0.0, 0.0, 0.0;
-    load_task_config(board_center_base, target_in_board, TORQUE_THRESHOLD);
+    int my_t_thresh;
+    load_task_config(board_center_base, target_in_board, my_t_thresh);
     
     // 坐标系齐次变换矩阵计算
     MatrixXd T_base_board = g_general_6s->rpy_2_tr(board_center_base);
@@ -96,50 +153,18 @@ void run_task_state_machine() {
         }
     }
 
-    // ------------------- 4. 智能缓慢下探与接触检测 -------------------
-    cout << "\n[动作 3] 开始缓慢下探并检测白板碰撞..." << endl;
-    
-    // 获取当前点位
+    // 提取的下探与按压封装函数
+    double probed_z = 0.0;
+    if (!probe_and_press(my_t_thresh, probed_z)) {
+        return; // 如果探测失败（如未碰到板子），则直接退出任务
+    }
+    // ------------------- 6. 执行平面擦拭轨迹 -------------------
+    cout << "\n[动作 5] 开始执行擦除动作..." << endl;
     VectorXd origin_point_joint(6);
     for (int i = 0; i < 6; i++) origin_point_joint(i) = g_general_6s->getActPositionAngle(i);
     MatrixXd trans_matrix;
     g_general_6s->calc_forward_kin(origin_point_joint, trans_matrix);
     VectorXd origin_cartesian = g_general_6s->tr_2_MCS(trans_matrix);
-    
-    // 阻塞式下探（内部遇到碰撞会立即清空轨迹并退出）
-    downward_probe_motion(-100, origin_point_joint, origin_cartesian);
-    
-    // 判断下探动作结束的原因
-    if (touch_detected) {
-        cout << "[任务状态] 成功接触白板！机器人已安全停止下探。" << endl;
-        cout << "   - [力矩详情] 阈值设定: " << TORQUE_THRESHOLD << endl;
-        cout << "   - [力矩详情] 基准力矩 J2: " << baseline_tor[1] << " | J3: " << baseline_tor[2] << endl;
-        cout << "   - [力矩详情] 触发力矩 J2: " << trigger_tor_1 << " | J3: " << trigger_tor_2 << endl;
-        cout << "   - [力矩详情] 实际偏差 J2: " << abs(trigger_tor_1 - baseline_tor[1]) 
-             << " | J3: " << abs(trigger_tor_2 - baseline_tor[2]) << endl;
-    } else {
-        cout << "\n[严重错误] 机器人向下探测了 100mm 仍未接触到白板，已到达行程极限！" << endl;
-        cout << " -> 任务终止，将返回原点..." << endl;
-        move_home_position();
-        return;
-    }
-    sleep(1); // 缓冲等待
-
-    // ------------------- 5. 额外施加下压力 -------------------
-    cout << "\n[动作 4] 施加额外下压 (3mm) 以保证擦拭摩擦力..." << endl;
-    for (int i = 0; i < 6; i++) origin_point_joint(i) = g_general_6s->getActPositionAngle(i);
-    g_general_6s->calc_forward_kin(origin_point_joint, trans_matrix);
-    origin_cartesian = g_general_6s->tr_2_MCS(trans_matrix);
-    
-    VectorXd press_joint_target(6);
-    VectorXd press_cartesian_target(6);
-    lining_motion_test(0.0, 0.0, -3.0, origin_point_joint, origin_cartesian, press_joint_target, press_cartesian_target);
-
-    // ------------------- 6. 执行平面擦拭轨迹 -------------------
-    cout << "\n[动作 5] 开始执行擦除动作..." << endl;
-    for (int i = 0; i < 6; i++) origin_point_joint(i) = g_general_6s->getActPositionAngle(i);
-    g_general_6s->calc_forward_kin(origin_point_joint, trans_matrix);
-    origin_cartesian = g_general_6s->tr_2_MCS(trans_matrix);
     
     VectorXd wipe_joint_target(6);
     VectorXd wipe_cartesian_target(6);
