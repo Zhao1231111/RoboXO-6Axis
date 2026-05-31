@@ -10,7 +10,7 @@
 #include <sched.h> /* sched_setscheduler() */
 #include <thread>
 #include <deque> 
-#include "eigen/Eigen/Eigen"
+#include <Eigen/Eigen>
 #include "general_6s.h"
 #include "ecrt.h"
 #include "probe_detect_tasks.h" // 引入任务声明

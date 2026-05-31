@@ -4,7 +4,7 @@
 #include <deque>
 #include <unistd.h>
 #include <iostream>
-#include "eigen/Eigen/Eigen"
+#include <Eigen/Eigen>
 #include "general_6s.h"
 
 using namespace Eigen;
