@@ -9,3 +9,6 @@ circle_trajectory_export
 circle_trajectory_export.cpp
 circle_trajectory_viewer.html
 circle_trajectory.csv
+
+compile_commands.json
+.cache/
