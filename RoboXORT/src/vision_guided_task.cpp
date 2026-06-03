@@ -71,6 +71,14 @@ void run_vision_object_task() {
     const VisionGuidedTaskConfig task_config = load_vision_guided_task_config();
     const VisionClientConfig vision_config = load_vision_client_config();
 
+    cout << "[视觉任务] 等待伺服上电..." << endl;
+    while (!PowerStatus) {
+        usleep(500000);
+    }
+
+    cout << "[视觉任务] 开始前回零..." << endl;
+    move_home_position();
+
     VisionDetectionResult result;
     string error;
     if (!request_vision_detection(task_config.target, result, error)) {
@@ -99,11 +107,6 @@ void run_vision_object_task() {
     cout << "[视觉任务] angle_board_rad: " << result.angle_board_rad << endl;
     cout << "[视觉任务] object_pose_base(x y z rx ry rz): " << object_pose_base.transpose() << endl;
     cout << "[视觉任务] pick_lift_mm: " << task_config.pick_lift_mm << endl;
-
-    cout << "[视觉任务] 等待伺服上电..." << endl;
-    while (!PowerStatus) {
-        usleep(500000);
-    }
 
     VectorXd above_object_base = object_pose_base;
     above_object_base(2) += task_config.pick_lift_mm;
