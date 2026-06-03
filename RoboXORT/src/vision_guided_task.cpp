@@ -33,6 +33,13 @@ static bool parse_bool_token(const string &text) {
     return text == "1" || text == "true" || text == "TRUE" || text == "on" || text == "ON";
 }
 
+static double normalize_symmetric_yaw_near(double yaw, double reference_yaw) {
+    const double symmetric_period = 3.14159265358979323846;
+    while (yaw - reference_yaw > 0.5 * symmetric_period) yaw -= symmetric_period;
+    while (yaw - reference_yaw < -0.5 * symmetric_period) yaw += symmetric_period;
+    return yaw;
+}
+
 static VisionGuidedTaskConfig load_vision_guided_task_config(const string &config_path = "config.txt") {
     VisionGuidedTaskConfig config;
     ifstream file(config_path);
@@ -98,7 +105,8 @@ void run_vision_object_task() {
     );
     Vector3d grasp_rpy_board = task_config.grasp_rpy_board;
     if (task_config.use_object_angle) {
-        grasp_rpy_board(2) += result.angle_board_rad;
+        const double raw_grasp_yaw = grasp_rpy_board(2) + result.angle_board_rad;
+        grasp_rpy_board(2) = normalize_symmetric_yaw_near(raw_grasp_yaw, task_config.grasp_rpy_board(2));
     }
     VectorXd object_pose_base = board_pose_to_base_pose(vision_config, object_board, grasp_rpy_board);
 
@@ -106,6 +114,7 @@ void run_vision_object_task() {
     cout << "[视觉任务] center_px: [" << result.center_px[0] << ", " << result.center_px[1] << "]" << endl;
     cout << "[视觉任务] center_board_mm: [" << object_board(0) << ", " << object_board(1) << ", " << object_board(2) << "]" << endl;
     cout << "[视觉任务] angle_board_rad: " << result.angle_board_rad << endl;
+    cout << "[视觉任务] cleaned_grasp_yaw_board_rad: " << grasp_rpy_board(2) << endl;
     cout << "[视觉任务] object_pose_base(x y z rx ry rz): " << object_pose_base.transpose() << endl;
     cout << "[视觉任务] pick_lift_mm: " << task_config.pick_lift_mm << endl;
 
