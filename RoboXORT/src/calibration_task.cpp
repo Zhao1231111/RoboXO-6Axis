@@ -84,20 +84,8 @@ void run_calibration_task() {
 
         cout << "正在沿 " << cmd << " 轴移动 " << distance << " ..." << endl;
 
-        // 获取当前关节角和位姿
-        VectorXd origin_point_joint(6);
-        for (int i = 0; i < 6; i++) {
-            origin_point_joint(i) = g_general_6s->getActPositionAngle(i);
-        }
-        MatrixXd trans_matrix;
-        g_general_6s->calc_forward_kin(origin_point_joint, trans_matrix);
-        VectorXd origin_cartesian = g_general_6s->tr_2_MCS(trans_matrix);
-
-        VectorXd target_joint(6);
-        VectorXd target_cartesian(6);
-
         // 调用直线插补运动
-        lining_motion_test(dx, dy, dz, origin_point_joint, origin_cartesian, target_joint, target_cartesian);
+        lining_motion_test(dx, dy, dz);
         cout << "移动完成！" << endl;
     }
 

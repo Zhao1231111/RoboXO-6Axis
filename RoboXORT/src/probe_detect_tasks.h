@@ -42,4 +42,7 @@ enum class TaskState {
 // --- 状态机任务主循环 ---
 void run_task_state_machine();
 
+// --- 封装好的下探与按压动作 ---
+bool probe_and_press(int torque_threshold, double &out_z_height);
+
 #endif // ROBOT_TASKS_H

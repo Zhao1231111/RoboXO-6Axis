@@ -1,5 +1,6 @@
 #include "chessboard_tasks.h"
 #include "motion_control.h" // 包含所有的运动控制接口
+#include "probe_detect_tasks.h"
 #include <cmath>
 
 extern void load_task_config(VectorXd& board_center, VectorXd& target_point, int& torque_thresh);
@@ -91,8 +92,7 @@ static void draw_segment_on_plane(double x0, double y0, double x1, double y1,
     double dy = y1 - current_cartesian(1);
     double dz = draw_z - current_cartesian(2); 
     
-    VectorXd dummy_j(6), dummy_c(6);
-    lining_motion_test(dx, dy, dz, current_joint, current_cartesian, dummy_j, dummy_c);
+    lining_motion_test(dx, dy, dz);
     
     // 画完后抬起画笔
     lift_pen(draw_z, pen_lift, draw_pose);
@@ -141,7 +141,7 @@ void draw_o(const VectorXd &board_center_cartesian,
                    double board_size,
                    double pen_lift,
                    int segments) {
-    if (segments < 12) segments = 12;
+    (void)segments;
 
     const VectorXd cell_center = get_cell_center_cartesian(board_center_cartesian, board_size, cell_index);
     const double cell = board_size / 3.0;
@@ -157,17 +157,13 @@ void draw_o(const VectorXd &board_center_cartesian,
     // 移到起点并下放
     move_pen_to_xy_without_drawing(start_x, start_y, z, pen_lift, board_center_cartesian);
 
-    for (int i = 1; i <= segments; ++i) {
-        const double theta = 2.0 * M_PI * static_cast<double>(i) / static_cast<double>(segments);
-        
-        VectorXd target_cartesian = get_current_cartesian();
-        target_cartesian(0) = cx + radius * cos(theta);
-        target_cartesian(1) = cy + radius * sin(theta);
-        target_cartesian(2) = z;
-        copy_pose_orientation(board_center_cartesian, target_cartesian);
-        
-        ptp_motion_to_cartesian_base(target_cartesian);
-    }
+    VectorXd current_joint = get_current_joint();
+    VectorXd current_cartesian = get_current_cartesian();
+    VectorXd dummy_j(6), dummy_c(6);
+
+    circle_motion_test(-2.0 * radius, 0.0, 0.0,
+                       0.0, 0.0, 0.0,
+                       current_joint, current_cartesian, dummy_j, dummy_c);
 
     lift_pen(z, pen_lift, board_center_cartesian);
 }
@@ -175,15 +171,27 @@ void draw_o(const VectorXd &board_center_cartesian,
 // ======================= 主接口 =======================
 
 void draw_tic_tac_toe_task() {
-    cout << "\n========== 开始绘制井字棋任务 ==========" << endl;
+    cout << "\n========== 开始绘制井字棋任务 ==========" << endl; 
+
+    // ------------------- 初始化与上电阶段 -------------------
+    cout << "\n[任务开始] 正在检查使能状态..." << endl;
+    while (!PowerStatus) {
+        usleep(500000);
+    }
+    cout << "[任务状态] 伺服上电完成！" << endl;
+
 
     // 1. 获取棋盘中心配置（与探测任务共用配置文件 config.txt）
     VectorXd board_center_cartesian(6);
     board_center_cartesian << 0.5, 0.0, 0.3, 0.0, 0.0, 0.0;
     VectorXd dummy_target(6);
     int dummy_torque = 150;
+    VectorXd pen_target(6);
+    pen_target << 622.292, -257.495, 370.013, 3.14159, -3.0319e-05, 1.09756e-05;
     
     load_task_config(board_center_cartesian, dummy_target, dummy_torque);
+    VectorXd origin_cartesian(6);
+    origin_cartesian = board_center_cartesian;
     
     // 修正棋盘中心位姿，强制设为笔尖向下 (RX = 180度, RY = 0, RZ = 0)
     // 这样在 draw_chessboard 和 draw_x/o 时，所有的点都会自动继承这个向下姿态！
@@ -194,11 +202,28 @@ void draw_tic_tac_toe_task() {
     // 3. 开始执行
     cout << "\n[动作 1] 复位..." << endl;
     move_home_position();
+
+    // 抓取画笔
+    double pen_z = board_center_cartesian(2);
+    grasp_pen(pen_target, pen_z);
+
+    VectorXd temp(6);
+    temp = board_center_cartesian;
+    temp(2) += 50;
+
+    ptp_motion_to_cartesian_base(temp);
+    lining_motion_test(0.0, 0.0, -50.0);
+    if (!probe_and_press(100, pen_z)) {
+        return; // 如果探测失败，则直接退出任务
+    }
+
+    // temp
+    double eraser_z = origin_cartesian(2);
+    // grasp_eraser(origin_cartesian, eraser_z);
+
     
-    cout << "\n[动作 2] 移动到棋盘中心上方..." << endl;
-    VectorXd top_center = board_center_cartesian;
-    top_center(2) += BOARD_PEN_LIFT_MM;
-    ptp_motion_to_cartesian_base(top_center);
+    // 更新棋盘中心坐标（使后续所有绘图都基于刚刚检测到的实际接触高度）
+    board_center_cartesian(2) = pen_z;
     
     // 画棋盘
     draw_chessboard(board_center_cartesian);
@@ -206,13 +231,59 @@ void draw_tic_tac_toe_task() {
     cout << "\n[动作 3] 回归安全点..." << endl;
     move_home_position();
     
-    draw_x(board_center_cartesian, 0);
-    move_home_position();
+    // ================== 用户交互循环 ==================
+    while (true) {
+        cout << "\n===============================" << endl;
+        cout << "请输入下一步指令: " << endl;
+        cout << "  x [0-8] : 在指定格子画 X (例: x 4)" << endl;
+        cout << "  o [0-8] : 在指定格子画 O (例: o 0)" << endl;
+        cout << "  e       : 结束绘画，开始擦除" << endl;
+        cout << "指令> ";
+        
+        string cmd;
+        cin >> cmd;
+        
+        if (cmd == "e" || cmd == "E") {
+            cout << "退出绘画模式..." << endl;
+            break;
+        } else if (cmd == "x" || cmd == "X") {
+            int pos;
+            cin >> pos;
+            if (pos >= 0 && pos <= 8) {
+                draw_x(board_center_cartesian, pos);
+                move_home_position();
+            } else {
+                cout << "位置错误：请输入 0~8 的数字！" << endl;
+            }
+        } else if (cmd == "o" || cmd == "O") {
+            int pos;
+            cin >> pos;
+            if (pos >= 0 && pos <= 8) {
+                draw_o(board_center_cartesian, pos);
+                move_home_position();
+            } else {
+                cout << "位置错误：请输入 0~8 的数字！" << endl;
+            }
+        } else {
+            cout << "未知指令，请重新输入！" << endl;
+            // 清理输入流，防止死循环
+            cin.clear();
+            cin.ignore(10000, '\n');
+        }
+    }
+    // =================================================
+
+    // double eraser_z = board_center_cartesian(2);
+    grasp_eraser(board_center_cartesian, eraser_z);
     
-    draw_o(board_center_cartesian, 4);
-    move_home_position();
+    // 更新棋盘中心坐标（使后续所有动作基于擦除高度）
+    board_center_cartesian(2) = eraser_z;
+
+    cout << "\n[动作 5] 开始执行擦除动作..." << endl;
     
-    draw_x(board_center_cartesian, 8);
+    // 在当前 X 轴方向平移 100mm (0.1m)
+    lining_motion_test(100.0, 0.0, 0.0);
+    
     move_home_position();
 
     cout << "\n========== 井字棋任务圆满结束 ==========" << endl;

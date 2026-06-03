@@ -15,6 +15,7 @@
 #include "ipc_protocol.h"
 #include "ipc_server.h"
 #include "teleop_keyboard.h"
+#include "chessboard_tasks.h"
 
 using namespace Eigen;
 using namespace std;
@@ -455,6 +456,81 @@ static void cyclic_task() {
             ecrt_master_send(ec_master);
         }
     }
+}
+
+
+// ============================================================================
+// 功能测试
+// ============================================================================
+// --- 初始化与功能测试 ---
+void test_robot_func() {
+    // 1. 设置机器人的 DH 参数 (Denavit-Hartenberg，用于运动学正逆解)
+    DH_param dh_example;
+    dh_example.a[0] = 0.0408; dh_example.a[1] = 450.342; dh_example.a[2] = 99.107; 
+    dh_example.a[3] = 0.0; dh_example.a[4] = 0.0; dh_example.a[5] = 0.0;
+    dh_example.alpha[0] = M_PI * 90 / 180; dh_example.alpha[1] = M_PI * 0 / 180; dh_example.alpha[2] = M_PI * 90 / 180;
+    dh_example.alpha[3] = M_PI * 90 / 180; dh_example.alpha[4] = M_PI * (-90) / 180; dh_example.alpha[5] = M_PI * 0 / 180;
+    dh_example.d[0] = 390; dh_example.d[1] = 0.4997; dh_example.d[2] = 0.0;
+    dh_example.d[3] = 470.557; dh_example.d[4] = 0.0; dh_example.d[5] = 123 + L; 
+    dh_example.theta[0] = M_PI * 0 / 180; dh_example.theta[1] = M_PI * 90 / 180; dh_example.theta[2] = M_PI * 0 / 180;
+    dh_example.theta[3] = M_PI * 0 / 180; dh_example.theta[4] = M_PI * 90 / 180; dh_example.theta[5] = M_PI * 0 / 180;
+
+    // 2. 设置笛卡尔空间运动参数
+    Decare_Para decare;
+    decare.maxacc = 5; decare.maxdec = -5; decare.maxjerk = 10000; decare.maxvel = 3000;
+
+    // 3. 设置电机与编码器参数
+    Motor_Param motor_pa;
+    motor_pa.encoder.reducRatio[0] = 80.007; motor_pa.encoder.reducRatio[1] = 109.837; motor_pa.encoder.reducRatio[2] = 100.024;
+    motor_pa.encoder.reducRatio[3] = 118.996; motor_pa.encoder.reducRatio[4] = 80.007; motor_pa.encoder.reducRatio[5] = 79.977;
+    
+    motor_pa.encoder.singleTurnEncoder[0] = 237.172852; motor_pa.encoder.singleTurnEncoder[1] = 207.078552; motor_pa.encoder.singleTurnEncoder[2] = 131.119080;
+    motor_pa.encoder.singleTurnEncoder[3] = 238.971863; motor_pa.encoder.singleTurnEncoder[4] = 31.110535; motor_pa.encoder.singleTurnEncoder[5] = 100.274963;
+    
+    motor_pa.encoder.direction[0] = -1; motor_pa.encoder.direction[1] = 1; motor_pa.encoder.direction[2] = 1;
+    motor_pa.encoder.direction[3] = -1; motor_pa.encoder.direction[4] = 1; motor_pa.encoder.direction[5] = -1;
+
+    motor_pa.RatedVel_rpm[0] = 450; motor_pa.RatedVel_rpm[1] = 350; motor_pa.RatedVel_rpm[2] = 450;
+    motor_pa.RatedVel_rpm[3] = 350; motor_pa.RatedVel_rpm[4] = 450; motor_pa.RatedVel_rpm[5] = 450;
+
+    for (int i = 0; i < 6; i++) {
+        motor_pa.encoder.deviation[i] = 0;
+        motor_pa.encoder.encoderResolution[i] = 23;
+        motor_pa.maxAcc[i] = 5.0;
+        motor_pa.maxDecel[i] = -5.0;
+        motor_pa.maxRotSpeed[i] = 5000;
+        motor_pa.RatedVel[i] = motor_pa.RatedVel_rpm[i] * 6 / motor_pa.encoder.reducRatio[i];
+        motor_pa.DeRatedVel[i] = -motor_pa.RatedVel[i];
+    }
+
+    extern General_6S* g_general_6s;
+    
+    // 初始化算法层对象
+    g_general_6s->set_param(motor_pa.encoder, motor_pa, dh_example, decare);
+    
+    // --- 运动学正解测试 ---
+    VectorXd pos_acs(6);
+    pos_acs << 0.5, 0, 0, 0, 0, 0; // 输入测试角度
+    MatrixXd trans_matrix;
+    g_general_6s->calc_forward_kin(pos_acs, trans_matrix);
+    
+    printf("正运动学变换矩阵:\n");
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) printf("%lf ", trans_matrix(i, j));
+        printf("\n");
+    }
+    printf("\n");
+    
+    // print_current_pos(motor_pa.encoder);
+    
+    
+    // 触发任务状态机
+    NeedPowerOn = 1;
+    sleep(5);
+    // multi_joint_move_test(); // 原来的调用方式
+    // run_task_state_machine(); // 新的任务状态机调用
+    // run_calibration_task();
+    draw_tic_tac_toe_task();
 }
 
 // ============================================================================

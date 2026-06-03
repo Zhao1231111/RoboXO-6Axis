@@ -41,7 +41,7 @@ void multi_joint_move_test();
  * @param target_point_cartesian_coordinate 返回：终点的笛卡尔位姿
  * @return 计算得到的终点笛卡尔位姿
  */
-VectorXd lining_motion_test(double x, double y, double z, VectorXd origin_point_angle_degree, VectorXd origin_point_cartesian_coordinate, VectorXd &target_point_joint_test, VectorXd &target_point_cartesian_coordinate);
+VectorXd lining_motion_test(double x, double y, double z);
 
 /**
  * @brief 在笛卡尔坐标系下的圆弧插补运动，基于当前位姿和两个相对点三点定圆弧
@@ -89,5 +89,16 @@ void ptp_motion_to_cartesian_base(VectorXd target_cartesian_base);
  * @param open true为打开，false为关闭
  */
 void set_gripper(bool open);
+
+/**
+ * @brief 执行抓取物体的全套动作：PTP到目标点 -> 张开夹爪 -> 下降 -> 闭合夹爪 -> 上升
+ * @param target_point_cartesian 安全位置（物体正上方）的笛卡尔坐标
+ * @param drop_height 抓取时需要下降的高度偏移量（mm）
+ */
+void grasp_object(VectorXd target_point_cartesian, double drop_height);
+
+void grasp_pen(VectorXd target_point_cartesian, double &out_z_height);
+
+void grasp_eraser(VectorXd target_point_cartesian, double &out_z_height);
 
 #endif // MOTION_CONTROL_H
