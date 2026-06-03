@@ -168,6 +168,10 @@ inline size_t frame_total_size(uint16_t payload_length) {
 // Shared State (Seqlock pattern: RT writes, IPC reads)
 // ============================================================================
 
+// NOTE: This seqlock relies on x86 TSO (Total Store Order) for correctness.
+// On x86, stores are never reordered w.r.t. other stores, so the sequence
+// counter visibility is guaranteed without explicit fences between writes.
+// If porting to ARM/other weak architectures, add std::atomic_thread_fence.
 struct SharedRobotState {
     alignas(64) std::atomic<uint32_t> seq{0};
     double   joints_deg[6]{};
@@ -177,24 +181,29 @@ struct SharedRobotState {
     uint8_t  phase{0};
 
     void write(const double* joints, const double* tcp, uint32_t io, uint8_t safe) {
-        seq.store(seq.load(std::memory_order_relaxed) + 1, std::memory_order_release);
+        uint32_t s = seq.load(std::memory_order_relaxed);
+        seq.store(s + 1, std::memory_order_relaxed); // odd = writing
+        std::atomic_thread_fence(std::memory_order_release);
         std::memcpy(joints_deg, joints, sizeof(joints_deg));
         std::memcpy(tcp_mm_deg, tcp, sizeof(tcp_mm_deg));
         io_state = io;
         safety = safe;
-        seq.store(seq.load(std::memory_order_relaxed) + 1, std::memory_order_release);
+        std::atomic_thread_fence(std::memory_order_release);
+        seq.store(s + 2, std::memory_order_release); // even = stable
     }
 
     bool read(StatusReportPayload& out) const {
         uint32_t s1 = seq.load(std::memory_order_acquire);
-        if (s1 & 1) return false; // writer active
+        if (s1 & 1) return false;
+        std::atomic_thread_fence(std::memory_order_acquire);
         std::memcpy(out.joints_deg, joints_deg, sizeof(joints_deg));
         std::memcpy(out.tcp_mm_deg, tcp_mm_deg, sizeof(tcp_mm_deg));
         out.io_state = io_state;
         out.phase = phase;
         out.safety = safety;
         std::memset(out._pad, 0, sizeof(out._pad));
-        uint32_t s2 = seq.load(std::memory_order_acquire);
+        std::atomic_thread_fence(std::memory_order_acquire);
+        uint32_t s2 = seq.load(std::memory_order_relaxed);
         return s1 == s2;
     }
 };
