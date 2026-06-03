@@ -168,6 +168,46 @@ void draw_o(const VectorXd &board_center_cartesian,
     lift_pen(z, pen_lift, board_center_cartesian);
 }
 
+void erase_chessboard(const VectorXd &board_center_cartesian,
+                      double board_size,
+                      double pen_lift) {
+    // 擦除时多扩展出20mm边缘，确保完全覆盖所有的X和O
+    const double half = board_size / 2.0 + 20.0; 
+    const double draw_z = board_center_cartesian(2);
+    const double cx = board_center_cartesian(0);
+    const double cy = board_center_cartesian(1);
+
+    cout << "\n[动作 5] 开始执行 S 形全覆盖擦除动作..." << endl;
+    
+    // 假设橡皮有效擦除宽度为30mm，计算需要的往复次数
+    double step_y = 30.0;
+    int num_lines = ceil((half * 2) / step_y);
+    if (num_lines < 2) num_lines = 2;
+    double actual_step = (half * 2) / (num_lines - 1);
+
+    // 首先移到左上角并下放（此处复用了力矩下探，安全可靠）
+    double start_x = cx - half;
+    double start_y = cy - half;
+    move_pen_to_xy_without_drawing(start_x, start_y, draw_z, pen_lift, board_center_cartesian);
+
+    int dir = 1; // 1代表向右(+X方向)，-1代表向左
+    for (int i = 0; i < num_lines; i++) {
+        // 横扫 (X轴)
+        double dx = (dir == 1) ? (half * 2) : -(half * 2);
+        lining_motion_test(dx, 0.0, 0.0);
+        
+        // 如果不是最后一条线，则向下移动一行 (Y轴)
+        if (i < num_lines - 1) {
+            lining_motion_test(0.0, actual_step, 0.0);
+        }
+        
+        dir = -dir; // 换向
+    }
+    
+    // 擦完后抬起橡皮
+    lift_pen(draw_z, pen_lift, board_center_cartesian);
+}
+
 // ======================= 主接口 =======================
 
 void draw_tic_tac_toe_task() {
@@ -181,46 +221,35 @@ void draw_tic_tac_toe_task() {
     cout << "[任务状态] 伺服上电完成！" << endl;
 
 
-    // 1. 获取棋盘中心配置（与探测任务共用配置文件 config.txt）
-    VectorXd board_center_cartesian(6);
-    board_center_cartesian << 0.5, 0.0, 0.3, 0.0, 0.0, 0.0;
-    VectorXd dummy_target(6);
-    int dummy_torque = 150;
-    VectorXd pen_target(6);
-    pen_target << 622.292, -257.495, 370.013, 3.14159, -3.0319e-05, 1.09756e-05;
-    
-    load_task_config(board_center_cartesian, dummy_target, dummy_torque);
+    // 1. 获取棋盘中心配置
+    VectorXd board_center_cartesian(6), pen_target(6), eraser_target(6);
+    board_center_cartesian << 527.299, -0.492295, 330.026, 3.14159, 0.0, 0.0;
+    pen_target << 622.292, -257.495, 370.013, 3.14159, 0.0, 0.0;
+    eraser_target << 622.292, -257.495, 370.013, 3.14159, 0.0, 0.0;
+
     VectorXd origin_cartesian(6);
     origin_cartesian = board_center_cartesian;
+
+    double pen_z = board_center_cartesian(2);
+    double eraser_z = origin_cartesian(2);
     
-    // 修正棋盘中心位姿，强制设为笔尖向下 (RX = 180度, RY = 0, RZ = 0)
-    // 这样在 draw_chessboard 和 draw_x/o 时，所有的点都会自动继承这个向下姿态！
-    board_center_cartesian(3) = 3.14159;
-    board_center_cartesian(4) = 0.0;
-    board_center_cartesian(5) = 0.0;
     
     // 3. 开始执行
     cout << "\n[动作 1] 复位..." << endl;
     move_home_position();
 
     // 抓取画笔
-    double pen_z = board_center_cartesian(2);
+
     grasp_pen(pen_target, pen_z);
 
     VectorXd temp(6);
     temp = board_center_cartesian;
     temp(2) += 50;
-
     ptp_motion_to_cartesian_base(temp);
     lining_motion_test(0.0, 0.0, -50.0);
     if (!probe_and_press(100, pen_z)) {
         return; // 如果探测失败，则直接退出任务
     }
-
-    // temp
-    double eraser_z = origin_cartesian(2);
-    // grasp_eraser(origin_cartesian, eraser_z);
-
     
     // 更新棋盘中心坐标（使后续所有绘图都基于刚刚检测到的实际接触高度）
     board_center_cartesian(2) = pen_z;
@@ -273,16 +302,21 @@ void draw_tic_tac_toe_task() {
     }
     // =================================================
 
-    // double eraser_z = board_center_cartesian(2);
-    grasp_eraser(board_center_cartesian, eraser_z);
+    grasp_eraser(eraser_target, eraser_z);
+    temp = board_center_cartesian;
+    temp(2) += 50;
+    ptp_motion_to_cartesian_base(temp);
+    lining_motion_test(0.0, 0.0, -50.0);
+    if (!probe_and_press(100, eraser_z)) {
+        return; // 如果探测失败，则直接退出任务
+    }
     
     // 更新棋盘中心坐标（使后续所有动作基于擦除高度）
     board_center_cartesian(2) = eraser_z;
 
-    cout << "\n[动作 5] 开始执行擦除动作..." << endl;
+    // 调用封装好的智能全覆盖擦除动作
+    erase_chessboard(board_center_cartesian);
     
-    // 在当前 X 轴方向平移 100mm (0.1m)
-    lining_motion_test(100.0, 0.0, 0.0);
     
     move_home_position();
 

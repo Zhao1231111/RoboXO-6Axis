@@ -474,7 +474,6 @@ void grasp_pen(VectorXd target_point_cartesian, double &out_z_height){
     string temp_input;
     cin >> temp_input;
 
-
     // 抓取物体
     grasp_object(top_center, 370.015 + 50.0 - 355.016); // original: 75
 
@@ -493,12 +492,6 @@ void grasp_eraser(VectorXd target_point_cartesian, double &out_z_height){
     string temp_input;
     cin >> temp_input;
 
-
     // 抓取物体
     grasp_object(top_center, 95); // original: 75
-
-    // 智能下探与按压
-    if (!probe_and_press(100, out_z_height)) {
-        return; // 如果探测失败，则直接退出任务
-    }
 }

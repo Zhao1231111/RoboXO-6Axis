@@ -34,4 +34,8 @@ void draw_o(const VectorXd &board_center_cartesian,
                    double pen_lift = BOARD_PEN_LIFT_MM,
                    int segments = BOARD_O_SEGMENTS);
 
+void erase_chessboard(const VectorXd &board_center_cartesian,
+                      double board_size = BOARD_SIZE_MM,
+                      double pen_lift = BOARD_PEN_LIFT_MM);
+
 #endif // CHESSBOARD_TASKS_H
