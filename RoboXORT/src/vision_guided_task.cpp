@@ -105,7 +105,7 @@ void run_vision_object_task() {
     );
     Vector3d grasp_rpy_board = task_config.grasp_rpy_board;
     if (task_config.use_object_angle) {
-        const double raw_grasp_yaw = grasp_rpy_board(2) + result.angle_board_rad;
+        const double raw_grasp_yaw = grasp_rpy_board(2) - result.angle_board_rad;
         grasp_rpy_board(2) = normalize_symmetric_yaw_near(raw_grasp_yaw, task_config.grasp_rpy_board(2));
     }
     VectorXd object_pose_base = board_pose_to_base_pose(vision_config, object_board, grasp_rpy_board);
