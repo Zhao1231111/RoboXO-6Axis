@@ -11,7 +11,7 @@ torque_threshold 120
 vision_server 192.168.20.2 50051
 vision_timeout_ms 60000
 whiteboard_size_mm 655.0 460.0
-vision_target eraser
+vision_target pen
 vision_use_object_angle 1
 vision_grasp_rpy_board 3.14159 0.0 0.0
 vision_pick_lift_mm 100.0
