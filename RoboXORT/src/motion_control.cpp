@@ -317,7 +317,16 @@ VectorXd downward_probe_motion(double z_offset, VectorXd origin_point_angle_degr
     // 延时 500ms，避开起步加速阶段的动摩擦力和惯性力矩峰值
     usleep(500000);
 
-    // 开启碰撞检测标志，通知实时线程开始检测力矩
+    // 【关键修复】：机器人由静止变为运动时，摩擦力方向和大小会突变（静摩擦 -> 动摩擦）
+    // 因此在加速完成、进入匀速下探状态后，我们必须重新抓取一次当前“运动状态下”的力矩作为新的基准！
+    int q_size = tor_deque_out.size();
+    if (q_size >= 6) {
+        for (int i = 0; i < 6; i++) {
+            baseline_tor[i] = tor_deque_out[q_size - 6 + i];
+        }
+    }
+
+    // 开启碰撞检测标志，通知实时线程开始检测相对力矩变化
     is_touch_probing = true;
     touch_detected = false;
 
