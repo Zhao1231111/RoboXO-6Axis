@@ -1,0 +1,413 @@
+%==============================================================================
+% 东南大学自动化学院《机器人控制》开题报告 LaTeX 模板
+%==============================================================================
+
+\documentclass[a4paper, 12pt, oneside]{ctexart}
+
+% -------------------- 页面布局 --------------------
+\usepackage[
+    a4paper,
+    top=2.5cm,
+    bottom=2.5cm,
+    left=2.5cm,
+    right=2.5cm
+]{geometry}
+
+% -------------------- 表格相关 --------------------
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{booktabs}
+
+% -------------------- 其他 --------------------
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\hypersetup{hidelinks}
+
+% -------------------- 章节格式 --------------------
+\ctexset{
+    section = {
+        name = {,、},
+        number = \chinese{section},
+        format = \Large\bfseries,
+    },
+    subsection = {
+        name = {,.},
+        format = \large\bfseries,
+    },
+    subsubsection = {
+        format = \normalsize\bfseries,
+    },
+}
+\renewcommand{\thesubsection}{\arabic{subsection}}
+
+% -------------------- 排版参数 --------------------
+\linespread{1.35}
+\setlist[itemize]{leftmargin=2em, itemsep=2pt, parsep=0pt, topsep=4pt}
+
+% -------------------- 上标引用 --------------------
+\newcommand{\supercite}[1]{\textsuperscript{[#1]}}
+
+% ==================== 文档开始 ====================
+\begin{document}
+\pagestyle{empty}
+
+% ---------- 表头行 ----------
+{
+\noindent 
+\renewcommand{\arraystretch}{1.5}
+\begin{tabularx}{\textwidth}{|p{3cm}|X|}
+    \hline
+    \centering \textbf{设计题目} & 基于六轴工业机器人的井字棋人机对局系统 \\
+    \hline
+\end{tabularx}
+}
+
+% ========================================================================
+%  一、问题描述与产品目标
+% ========================================================================
+\section{问题描述与产品目标}
+
+\subsection*{总体介绍}
+
+本项目的目标是开发一套基于工业机器人的井字棋人机对局系统。系统使用课程提供的 MOKA MR07S 六轴工业机器人作为执行机构，搭配 OAK-D Pro 深度相机进行视觉感知，在示教器上的 Windows 平板端运行前端交互界面。机器人能够自动在水平放置的 A3 白板上画出棋盘，通过视觉识别用户所画的圈或叉，用可调难度的 AI 算法决定落子位置，然后抓取马克笔在白板上画出对应棋子。系统支持多局连续对局，对局结束后可抓取板擦擦除棋盘重新开始。马克笔和板擦的抓取、放置和切换均由视觉引导完成，不依赖固定的预设抓取点。
+
+目标用户是经过机器人学培训的学生、教师和工程师。未经培训的人员不得操作本系统。
+
+\subsection*{安全}
+
+MOKA MR07S 自重约 172kg，额定负载 7kg，不是协作机器人，没有内建碰撞检测或力矩自限功能。如果运动中与人员发生意外接触，可能造成严重伤害。因此安全是本系统的最重要的设计要求。
+
+我们在五个层面设置了保护措施。第一，伺服驱动器设置力矩和速度软件上限。第二，用深度相机持续监测工作区域，检测到人员侵入后立即通知控制器停机。第三，机器人每次开始动作前，操作员必须按下示教器上的物理启动按钮，随后声光警报持续 3 秒，且控制器通过深度相机确认作业区域无障碍后，才会开始运动。第四，示教器前端界面上始终有一块区域显示机器人当前安全状态（已抱闸、倒计时中、运动中），使用符合 ISO 3864 标准的颜色编码（绿色、黄色、红色）和符合 ISO 7010 标准的图标，操作员可随时了解安全状况。第五，示教器上有一个硬接线急停按钮，可在任何时刻直接指令伺服抱闸。这些措施在第四节的功能模块设计中分别详细说明。
+
+\subsection{功能需求}
+
+\begin{itemize}
+    \item \textbf{棋盘绘制}：机器人在 A3 白板上绘制标准井字棋棋盘（"井"字形四条线）。
+    \item \textbf{棋盘状态识别}：通过 OAK-D Pro 相机识别棋盘上 9 个格子的状态（空 / O / X）。
+    \item \textbf{决策}：可调难度（简单 / 中等 / 困难）的 Minimax 算法，用户可在 UI 上选择先后手。
+    \item \textbf{马克笔抓取与绘制棋子}：机器人基于 RGB-D 数据，经 Grounding DINO / SAM2 分割点云和 GraspGen 生成抓姿后抓取马克笔，在对应格子中画出 O 或 X。
+    \item \textbf{工具切换 (扩展)}：核心抓笔流程稳定后，可扩展到马克笔与板擦的抓取和切换。
+    \item \textbf{柔顺书写控制}：在无力传感器条件下，通过伺服力矩突变检测实现接触检测，配合末端被动柔顺缓冲和平面贴合插补，将力控问题转化为位置控制问题。
+    \item \textbf{多回合对局}：支持连续多局流程，每局结束后可选择继续或退出。
+    \item \textbf{安全流程}：伺服力矩/速度限制；视觉检测人员侵入时立即停机；每回合按下启动按钮后声光报警 3 秒；运动期间前端显示警告；完成后回到安全位置抱闸并提示安全。
+    \item \textbf{示教器 UI}：在 Windows 平板上显示对局界面、手动操作界面和设置界面，包含安全状态常驻显示、三维机械臂可视化和 IO 控制。
+\end{itemize}
+
+\subsection{性能需求}
+
+\begin{itemize}
+    \item 单步决策 + 绘制完成时间 < 45 秒
+    \item 棋盘状态识别准确率 > 98\%
+    \item 接触检测响应时间 < 100ms
+    \item 棋子绘制位置精度 $\pm$2mm
+    \item 马克笔抓取过程（检测 + 分割 + 点云 + 抓姿生成 + 执行）总周期 < 15 秒
+    \item 分割点云有效率 > 90\%，抓姿生成成功率 > 95\%，筛选后可执行率 > 90\%，一次抓取成功率 $\ge$ 95\%
+    \item 安全系统响应时间（检测到侵入到完全停止）< 500ms
+    \item 系统可连续稳定运行 > 10 局
+    \item 板擦擦除后白板残留率 < 5\% (扩展)
+\end{itemize}
+
+% ========================================================================
+%  二、相关产品、可能的解决方案及涉及的工程标准
+% ========================================================================
+\section{相关产品、可能的解决方案及涉及的工程标准}
+
+\subsection{相关产品与研究现状}
+
+已有的机器人井字棋或书写系统可以分为几类。ABB 用双臂协作机器人 YuMi 做过井字棋展会演示\supercite{1}，由于 YuMi 本身是协作臂，安全设计比较简单，不需要物理围栏。部分仿真环境下的方案（如 V-REP/CoppeliaSim 中使用 ABB IRB360）用图像处理 Blob 检测来追踪落子位置。开源项目 Tic-Tac-Robo 用 Kinova Gen3 Lite 搭配 AprilTag/ArUco 标记辅助棋盘检测，结合 Minimax AI 实现对局。Franka Panda 书写机器人\supercite{7}用力控和导纳控制在白板上写字，并用 AprilTag 做视觉定位。2024 年全国大学生电子设计竞赛中出现的 MaixCam 井字棋方案结合 YOLOv5 识别棋子和 Minimax 算法决策，但执行机构用的是 XYZ 三轴绘图仪，运动自由度有限。
+
+在视觉抓取方面，传统方法依赖经典的 AX=XB 手眼标定\supercite{4, 14}来确定物体在机器人坐标系中的位置。近年的工作使用 Grounding DINO\supercite{18} 做开放语义检测、SAM 2\supercite{19} 做精细分割，再将分割得到的点云输入 GraspGen\supercite{20} 等生成式框架来产生 6-DoF 抓姿。这条技术路线不需要对每种工具单独预设抓取点，对工具摆放位置的容忍度更好。
+
+\subsection{可能的解决方案对比}
+
+在执行机构与系统架构的选择上，主要有以下三种方案：
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|p{2.2cm}|p{4.0cm}|p{3.8cm}|p{3.8cm}|}
+\hline
+\textbf{方案维度} & \textbf{方案 A（本方案）} & \textbf{方案 B} & \textbf{方案 C} \\ \hline
+机械系统 & 六轴工业臂 \newline (MOKA MR07S) & 协作机器人 \newline (如 UR5e / YuMi) & 直角坐标机器人 \newline (XYZ 三轴绘图仪) \\ \hline
+下棋方式 & 视觉引导抓取马克笔，逆运动学规划轨迹绘制 O/X & 夹爪抓取预制棋子放置于棋盘 & 笔固定于 Z 轴，只做二维平面移动绘图 \\ \hline
+视觉与抓取 & OAK-D Pro (RGB-D) + DINO\supercite{18} + SAM2\supercite{19} + GraspGen\supercite{20} & Eye-in-Hand 标定\supercite{4} + 模板匹配 & 顶部 2D 俯拍相机 + YOLOv8\supercite{6} \\ \hline
+控制架构 & 自研 C++ + EtherCAT\supercite{2} & ROS + MoveIt\supercite{16} & 开源 3D 打印固件 \\ \hline
+安全设计 & 视觉监控 + 按钮启动 + 声光报警\supercite{8, 12} & 协作臂内建碰撞检测 & 简单防护罩 \\ \hline
+\end{tabular}
+\end{center}
+
+本项目选择方案 A，原因有两个。一是硬件平台由课程指定（MOKA MR07S + EtherCAT），自研 C++ 控制架构比使用 ROS/MoveIt 更能让团队掌握底层 EtherCAT 通信和伺服控制的细节\supercite{2}。二是与三轴绘图仪或预制棋子拾放相比，用六轴工业臂抓取马克笔并在白板上画棋子，涉及逆运动学求解\supercite{16, 17}、视觉引导抓取和接触力控制，工程复杂度和学习价值更高。采用 DINO/SAM2/GraspGen 链路动态生成抓姿，也不需要在工具架上精确预设抓取位置。
+
+\subsection{涉及的工程标准}
+
+\begin{itemize}
+    \item \textbf{ISO 10218-1:2025 / ISO 10218-2:2025}：工业机器人及系统集成安全要求\supercite{8, 9}
+    \item \textbf{GB 11291.1-2011 / GB 11291.2-2013}：工业环境用机器人安全国家标准\supercite{12, 13}
+    \item \textbf{ISO 13849-1:2023}：控制系统安全相关部件设计通则\supercite{10}
+    \item \textbf{ISO 7010:2019 / ISO 3864-1:2024}：安全标志与安全色标准\supercite{11}
+    \item \textbf{EtherCAT (IEC 61158)}：工业以太网实时通信协议标准
+\end{itemize}
+
+% ========================================================================
+%  参考文献
+% ========================================================================
+\subsection*{参考文献}
+\addcontentsline{toc}{section}{参考文献}
+
+{
+\small
+\begin{enumerate}[label={[\arabic*]}, leftmargin=3em, itemsep=0pt, parsep=2pt]
+\item Thormann C, Winkler A. Playing Tic-Tac-Toe with a Lightweight Robot[C]// International Conference on Robotics in Education (RiE). Springer, 2022: 149-160.
+\item Chou Y H, Yang C Y, Lai C C. Develop Real-Time Robot Control Architecture Using Robot Operating System and EtherCAT[J]. Actuators, 2021, 10(7): 141.
+\item Liu M, Xu Z, Zhang K, et al. Automatic Robot Hand-Eye Calibration Enabled by Learning-Based 3D Vision[J]. Journal of Intelligent \& Robotic Systems, 2024, 110: 166.
+\item Tsai R Y, Lenz R K. A new technique for fully autonomous and efficient 3D robotics hand/eye calibration[J]. IEEE Transactions on Robotics and Automation, 1989, 5(3): 345-358.
+\item Russell S J, Norvig P. Artificial Intelligence: A Modern Approach[M]. 4th ed. Pearson, 2021.
+\item Jocher G, Chaurasia A, Qiu J. Ultralytics YOLO (v8)[EB/OL]. 2023.
+\item Clifford G. Advanced Robot Manipulation and Admittance Control on the Franka Panda Robot Arm[EB/OL]. 2023.
+\item ISO 10218-1:2025. Robotics --- Safety requirements for industrial robots --- Part 1: Robots[S]. Geneva: ISO, 2025.
+\item ISO 10218-2:2025. Robotics --- Safety requirements for industrial robots --- Part 2: Robot systems and integration[S]. Geneva: ISO, 2025.
+\item ISO 13849-1:2023. Safety of machinery --- Safety-related parts of control systems --- Part 1: General principles for design[S]. Geneva: ISO, 2023.
+\item ISO 7010:2019. Graphical symbols --- Safety colours and safety signs --- Registered safety signs[S]. Geneva: ISO, 2019.
+\item GB 11291.1-2011. 工业环境用机器人 安全要求 第1部分：机器人[S]. 北京：中国标准出版社, 2011.
+\item GB 11291.2-2013. 机器人与机器人装备 工业机器人的安全要求 第2部分：机器人系统与集成[S]. 北京：中国标准出版社, 2013.
+\item Park F C, Martin B J. Robot sensor calibration: solving AX=XB on the Euclidean group[J]. IEEE Transactions on Robotics and Automation, 1994, 10(5): 717-721.
+\item Knuth D E. An Analysis of Alpha-Beta Pruning[J]. Artificial Intelligence, 1975, 6(4): 293-326.
+\item 陈瑞祥, 张铁, 谢存禧. 基于矩阵分解的6自由度机器人逆运动学高效求解算法[J]. 机械工程学报, 2023, 59(3): 1-10.
+\item Jazar R N. Theory of Applied Robotics: Kinematics, Dynamics, and Control[M]. 3rd ed. Springer, 2022.
+\item Liu S, Zeng Z, Ren T, et al. Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection[J/OL]. arXiv:2303.05499, 2023.
+\item Ravi N, Gabeur V, Hu Y T, et al. SAM 2: Segment Anything in Images and Videos[J/OL]. arXiv:2408.00714, 2024.
+\item Murali A, Sundaralingam B, Chao Y W, et al. GraspGen: A Diffusion-based Framework for 6-DOF Grasping with On-Generator Training[J/OL]. arXiv:2507.13097, 2025.
+\item Microsoft. Fluent UI React v9[EB/OL]. 2024. https://react.fluentui.dev/.
+\item Ram\'{i}rez S. FastAPI[EB/OL]. 2024. https://fastapi.tiangolo.com/.
+\item Cabello R. Three.js --- JavaScript 3D Library[EB/OL]. 2024. https://threejs.org/.
+\end{enumerate}
+}
+
+% ========================================================================
+%  三、产品或设计性能指标
+% ========================================================================
+\section{产品或设计性能指标}
+
+拟定一组可量化的性能指标，以作为最终验收的评判依据。
+
+\begin{itemize}
+    \item \textbf{绘制精度}：棋盘线条直线度偏差 $\le$ 1mm；棋子（O/X）绘制中心位置偏差 $\le$ $\pm$2mm。
+    \item \textbf{识别性能}：棋盘格状态识别准确率 $\ge$ 98\%；棋子类型（O/X）分类准确率 $\ge$ 99\%；单帧识别延迟 < 200ms。
+    \item \textbf{运动性能}：单步下棋周期（识别 + 决策 + 运动）< 45 秒；马克笔抓取周期（DINO 检测、SAM2 分割、点云生成、GraspGen 抓姿生成、机械臂执行）< 15 秒；棋盘绘制时间 < 60 秒；工具放置或切换周期 < 10 秒；启用擦除功能时整局擦除时间 < 30 秒。
+    \item \textbf{抓取链路}：Grounding DINO 检测框召回率 $\ge$ 95\%；SAM2 分割掩膜与标注区域 IoU $\ge$ 0.85；分割后点云有效点比例 $\ge$ 90\%；GraspGen 候选抓姿生成成功率 $\ge$ 95\%；筛选后可执行率 $\ge$ 90\%。
+    \item \textbf{决策}：困难模式下 Minimax 完全搜索（搜索时间 < 100ms），AI 不会输；中等模式胜率约 60\%--80\%；简单模式胜率约 30\%--50\%。
+    \item \textbf{安全指标}：人员侵入检测到停止运动的总延迟 < 500ms；伺服力矩限制为额定的 50\%；关节最大角速度限制为额定的 30\%；声光报警响应时间 < 100ms。
+    \item \textbf{系统可靠性}：连续运行 $\ge$ 10 局无系统故障；马克笔一次抓取成功率 $\ge$ 95\%；启用擦除功能时残留面积 < 5\%。
+\end{itemize}
+
+% ========================================================================
+%  四、总体方案设计与集成
+% ========================================================================
+\section{总体方案设计与集成}
+
+\subsection{系统硬件组成}
+
+\begin{center}
+    \includegraphics[width=\linewidth]{images/hardware_structure.png}
+\end{center}
+
+\begin{itemize}
+    \item MOKA MR07S 六轴工业机器人（6kg 负载, 930mm 臂展, $\pm$0.05mm 重复定位精度）
+    \item RA1E EtherCAT 伺服驱动器 $\times$6
+    \item MT-MSR1616A EtherCAT IO 模块（16DI/16DO）
+    \item 气动二指平行夹爪 + 空压机 + 电磁阀
+    \item OAK-D Pro 深度相机（双目立体视觉 + IR 投射器, 12MP RGB, 板载 AI）
+    \item 三脚架（相机安装，俯视白板）
+    \item 工控计算机（Ubuntu 22.04 + PREEMPT\_RT 实时内核）
+    \item 示教器（启动/停止/急停硬件按钮 + 10 寸 Windows 平板）
+    \item 声光报警器（接 IO 模块 DO）
+    \item A3 白板 + 马克笔 + 板擦（扩展）+ 工具架
+\end{itemize}
+
+\subsection{子系统划分与软件结构}
+
+\begin{center}
+    \includegraphics[width=\linewidth]{images/software_structure.png}
+\end{center}
+
+系统软件分为五个子系统。实时控制子系统（C++）负责 EtherCAT 主站通信、伺服位置/速度/力矩控制、IO 控制（夹爪和声光报警）、逆运动学求解、笛卡尔轨迹插补、以及安全监控与急停逻辑。视觉与抓取感知子系统（Python + DepthAI SDK）负责棋盘检测和棋子识别、OAK-D Pro RGB-D 数据对齐、Grounding DINO 工具检测、SAM2 分割、点云生成、人员侵入检测、以及手眼标定。决策与安全逻辑子系统（Python）负责状态机管理和 Minimax AI 决策。后端服务子系统（Python FastAPI）负责 REST API 和 WebSocket 接口、IPC 通信和系统协调。前端 UI 子系统（Next.js + React + Fluent UI）负责对局界面、手操界面、设置界面、安全状态显示和三维可视化。
+
+\subsection{各功能模块设计}
+
+\subsubsection*{EtherCAT 通信与伺服控制模块}
+
+实时控制层基于 EtherCAT 进行通信。主站运行在 PREEMPT\_RT 实时内核上，以 SCHED\_FIFO 调度策略的最高优先级运行，通信周期 1ms。六个 RA1E 伺服驱动器工作在 CSP 模式，主站每个周期通过 PDO 映射下发目标位置，并读取实际位置、速度和力矩反馈。IO 模块 MT-MSR1616A 的数字输出控制夹爪电磁阀和声光报警器，数字输入读取示教器上启动和停止按钮的状态。
+
+\subsubsection*{运动学与轨迹规划模块}
+
+运动学模型根据 MOKA MR07S 的 DH 参数表建立\supercite{17}。逆运动学求解优先尝试解析法（如果 DH 参数满足 Pieper 条件），否则回退到阻尼最小二乘数值迭代法\supercite{16}。笛卡尔空间轨迹在 Task Space 中规划直线和圆弧路径，等间距采样后逐点逆解为关节角度，按 1ms 周期插补下发。棋盘绘制需要 4 条直线段画出"井"字形；O 棋子用圆弧轨迹，X 棋子用两条对角线段。对于板擦功能，擦除轨迹采用 Z 形扫描覆盖棋盘区域。
+
+书写和擦除中的接触控制不依赖力传感器。做法是通过马克笔或板擦本身的柔性前端，这样只需控制下压深度就能得到大致稳定的接触力。接触检测利用 1ms 周期内读取的伺服力矩反馈：工具沿 Z 轴以约 2mm/s 的速度向白板缓慢下探，力矩值出现突变时立即停止并记录 Z 坐标。在此基础上 Z 轴额外上抬 1$\sim$3mm 以避免过度压力。后续所有绘制和擦除轨迹的二维坐标均代入事先示教标定过的白板平面参数，生成贴合白板的三维坐标后进行空间轨迹插补，保证工具全程与白板稳定接触。
+
+\subsubsection*{工具抓取与切换模块}
+
+工具架放置在机器人工作空间内的固定位置，为马克笔提供存放位，也预留了板擦的存放空间，而且让马克笔直立、板擦平放以便抓取时就是适合工作的姿态。工具架位置提供搜索区域先验，但最终抓姿由视觉动态生成。
+
+在抓取流程中，OAK-D Pro 同步采集 RGB 图像和深度图并完成对齐。将 RGB 图像输入 Grounding DINO\supercite{18}，使用"marker pen"等语义提示词检测马克笔候选框。将检测框作为 SAM2\supercite{19} 的 box prompt 得到掩膜，再用掩膜过滤深度图后反投影为局部三维点云，经统计滤波和桌面平面剔除去除噪声。将点云输入 GraspGen\supercite{20} 生成多组 6-DoF 候选抓姿，然后筛选，取最优抓姿来执行"预抓取位$\to$接近$\to$夹爪闭合$\to$抬升"动作序列。
+
+放置工具时使用工具架的已标定位置参数，执行"到放置位上方$\to$下降$\to$松爪$\to$抬升"。如果后续决定制作板擦功能，只需更换 DINO 的提示词和工具尺寸约束设定，整条感知链路可以复用。任何环节失败（检测不到马克笔、点云质量不足、无可执行抓姿或空夹）时，系统自动重试，不进入绘制阶段。
+
+\subsubsection*{视觉识别模块}
+
+OAK-D Pro 安装在三脚架上俯视白板，视场覆盖整个图板区域。手眼标定采用 Eye-to-Hand 方式，用棋盘格标定板求解相机到机器人基坐标系的变换矩阵（AX=ZB 方法\supercite{4, 14}）。RGB-D 数据预处理包括深度图与 RGB 对齐、有效深度范围裁剪、以及反光区域深度空洞的邻域填补。棋盘检测通过灰度化、Canny 边缘检测和 Hough 直线检测找到"井"字四条线，由交点确定 9 个格子的 ROI。对于每个格子内的棋子识别，可以先尝试传统 CV 特征提取判断圆形、交叉或空白，如果效果不好再以 YOLOv8\supercite{6} 检测作为增强。
+
+人员侵入检测利用 OAK-D Pro 的深度图和板载推理能力运行轻量化人体检测模型（如 MobileNet-SSD），当检测到人员进入预设安全边界时通过 IPC 通知控制器停机。视觉子系统输出的是马克笔分割掩膜、局部点云和点云质量评估数据，而不是单一的固定坐标。
+
+\subsubsection*{决策模块}
+
+决策 AI 采用 Minimax 搜索配合 Alpha-Beta 剪枝\supercite{5, 15}。由于井字棋状态空间小，易于完全搜索以做到机器人不会输，计划提供多个难度等级来使其更为有趣味。困难模式下完全搜索。中等模式通过限制搜索深度到 4 层或以 30\% 概率选次优走法来降低强度。简单模式搜索深度限制为 2 层或以 60\% 概率随机走子。先手由用户在前端界面选择。
+
+\subsubsection*{状态机与流程控制}
+
+整体流程由一个有限状态机驱动，状态转移图见下图。状态机从 Idle 开始，用户点击开始后进入 DrawBoard（绘制棋盘），完成后根据先手设置进入 WaitHuman 或 RobotThinking。用户画棋并按启动按钮后进入 Recognizing 进行视觉识别，识别成功转到 RobotThinking 由 AI 决策。决策完成经 Alarming（3 秒声光倒计时）和 RobotMoving（执行动作），然后 SafeReturn（回安全位抱闸），再由 CheckEnd 判断是否终局。未结束回到 WaitHuman，结束进入 GameOver。用户可选继续（Erasing 擦除后重开）或退出（回 Idle）。Erasing 状态在核心版本中先提示用户手动擦除，板擦功能调通后再启用自动擦除。
+
+\begin{center}
+    \includegraphics[width=\linewidth]{images/state_machine.png}
+\end{center}
+
+\subsubsection*{前端 UI 子系统}
+
+\noindent\textit{技术选型}
+
+前端运行在示教器的 10 寸 Windows 平板上，用户通过浏览器访问后端提供的 Web 应用。框架选用 Next.js 16，利用其静态导出功能将前端编译为 HTML、JavaScript 和 CSS 文件，由后端 FastAPI 直接托管，这样平板上不需要单独安装 Node.js 运行环境，部署只需要一个浏览器。组件库使用微软的 Fluent UI React v9\supercite{21}。Fluent UI 提供了按钮、下拉框、选项卡等常用控件，视觉风格偏向简洁，对触摸操作有较好的支持，控件的触摸目标尺寸满足工业 HMI 的可用性要求。全局状态（机器人关节角度、末端位姿、棋盘、安全状态等）通过 React 19 的 Context 和 Hooks 机制管理，不引入额外的状态管理库。前端与后端通过 WebSocket 保持一条持久连接，后端以约 50 到 100 毫秒的间隔推送状态数据，前端收到后更新各界面组件。
+
+此外，前端使用 Three.js\supercite{23} 渲染机械臂的三维模型。模型根据 MOKA MR07S 的 DH 参数表在浏览器端构建运动链：每个连杆用简化的几何体（圆柱体或长方体）表示，关节角度从 WebSocket 收到的实时数据中读取，浏览器端按 DH 参数完成正运动学计算，将各齐次变换矩阵应用到对应的 Three.js Object3D 上，实时更新各连杆位姿。用户可以通过触摸拖动旋转和缩放三维视角。这个三维视口同时出现在自动页面（小尺寸，用于快速确认机械臂姿态）和手操页面（大尺寸，用于观察点动操作的效果）。
+
+\noindent\textit{页面结构}
+
+前端采用顶部选项卡导航，分为三个页面："自动""手动"和"设置"。选项卡按钮宽度和高度均足够大以适应触屏操作。
+
+\noindent\textit{自动页面}
+
+自动页面采用左右分栏布局。左侧约占屏幕宽度的 60\%，显示一个 3$\times$3 的棋盘网格。每个格子根据后端推送的棋盘数组实时渲染为空白、圈或叉。棋盘上方有文字提示当前轮到哪一方，对局结束后在棋盘区域显示胜负或平局结果。右侧上部为控制区，包含难度选择下拉框（简单、中等、困难）、先手选择（人类先手或机器人先手）、开始和重来按钮、以及本轮对局的胜/负/平统计。右侧中部嵌入一个小的 Three.js 三维视口（约 200$\times$150 像素），实时显示机械臂的当前姿态。
+
+屏幕底部是一个横跨全宽的常驻安全状态区域，高度约占屏幕的四分之一到五分之一。这个区域始终可见，不会被弹出框或其他界面元素遮挡或关闭。它的背景颜色根据机器人当前状态切换：已抱闸时为绿色（ISO 3864 安全色），显示 “已抱闸” 文字和安全符号；倒计时阶段为红色（禁止色），显示 ISO 7010 P004 “禁止通行” 警告标志、 “警告：离开作业区域，机械臂即将起动” 文字和剩余秒数；机器人运动期间为黄色（警告色），显示 ISO 7010 W019 “挤压” 警告标志和 “警告：挤压危险，机械臂在移动” 文字。采用常驻区域而不是弹出式覆盖层，是因为覆盖层可能被误操作关闭，而且操作员切换到其他选项卡时看不到。常驻在屏幕底部的色块保证操作员在任何操作过程中，余光都能注意到安全状态的变化。
+
+\noindent\textit{手动页面}
+
+手动页面用于手动操控机器人，不进行对局。上半部分是一个较大的 Three.js 三维视口，渲染六轴机械臂的三维模型。下半部分分为左右两列。左列显示当前六个关节的角度值（J1 至 J6，单位为度），每个关节旁边有"+"和"$-$"两个点动按钮。右列显示末端的直角坐标（X、Y、Z 单位为毫米，Rx、Ry、Rz 单位为度），同样每个轴有一对点动按钮。按下点动按钮后，前端发送 REST API 请求到后端，后端将其转换为 IPC 指令传给 C++ 实时控制进程；松开按钮后发送停止指令。坐标显示由 WebSocket 推送数据更新。
+
+坐标区上方是速度倍率选择器，提供 1\%、5\%、10\%、50\%、100\% 五个档位，用一组互斥按钮实现。页面底部是 IO 控制面板，包含夹爪开合两个按钮和声光报警手动触发按钮，旁边用颜色圆点指示各 IO 通道的当前状态（夹爪是否闭合、报警器是否激活等）。手动页面的底部同样有常驻安全状态区域，与自动页面的规格一致。
+
+\noindent\textit{设置页面}
+
+设置页面显示 WebSocket 连接状态和 IPC 连接状态，以及软件版本信息。
+
+\noindent\textit{前端安全设计}
+
+除了常驻安全状态区域外，前端还实现了 WebSocket 断线检测。如果与后端的连接中断超过 2 秒，弹出警告提示"连接中断"。后端在检测到前端断连后向 C++ 控制器发送停机指令，因为此时无法确认操作员是否仍在监控安全状态。界面上所有交互控件的触摸目标不小于 48$\times$48 dp，安全相关按钮放置在远离日常高频操作区域的位置，防止误触。安全状态区域的颜色编码遵循 ISO 3864 的规定：红色表示危险，黄色表示警告，绿色表示安全。
+
+下图为对局页面和手操页面的界面原型草图（待补充）。
+
+\begin{center}
+\fbox{\begin{minipage}{0.42\linewidth}\centering\vspace{2.8cm}
+\textit{图：对局页面 mockup（待插入）}
+\vspace{2.8cm}\end{minipage}}
+\hfill
+\fbox{\begin{minipage}{0.42\linewidth}\centering\vspace{2.8cm}
+\textit{图：手操页面 mockup（待插入）}
+\vspace{2.8cm}\end{minipage}}
+\end{center}
+
+\subsubsection*{后端服务子系统}
+
+\noindent\textit{框架选型}
+
+后端使用 Python 的 FastAPI 框架\supercite{22}。选择 FastAPI 是因为它原生支持 asyncio 异步处理，可以在同一个进程中同时响应 HTTP 请求、维持 WebSocket 长连接、并通过 Unix Domain Socket 与 C++ 实时控制进程通信，不需要开多个服务进程。FastAPI 还能根据 Python 类型注解自动生成 OpenAPI 接口文档，在前端开发阶段可以直接在浏览器里查阅各接口的参数格式和返回值，方便调试。请求参数的校验通过 Pydantic 数据模型完成，格式不对的指令在到达机器人控制器之前就会被拦截并返回错误信息。
+
+\noindent\textit{REST API 设计}
+
+API 按功能分为三组。\texttt{/api/game/} 组处理逻辑相关操作：开始新局（传入难度和先手设置）、查询当前棋盘状态、重置对局。\texttt{/api/robot/} 组处理机器人控制：点动指令（指定关节或直角坐标轴向、方向和速度倍率）、软件急停、查询当前关节角度和末端位姿。\texttt{/api/system/} 组处理系统级功能：触发白板平面或手眼标定流程、查询系统运行状态、获取日志。由于用了 FastAPI 框架，所有 API 端点在 FastAPI 的 OpenAPI 页面（\texttt{/docs}）上自动列出，带有参数说明和示例。
+
+\noindent\textit{WebSocket 实时通信}
+
+后端开放一个 \texttt{/ws/state} 端点用于实时状态推送。前端连接后，后端以约 50 到 100 毫秒的周期发送一个 JSON 对象，内容包括：六个关节角度（单位度）、末端直角坐标（X/Y/Z 毫米，Rx/Ry/Rz 度）、夹爪状态（开/合）、当前棋盘（$3\times3$ 数组，每个元素为空/O/X）、当前阶段（空闲、等待用户、倒计时、运动中等枚举值）、以及安全状态（已抱闸、倒计时中、运动中）。前端解析这个 JSON 后更新所有相关组件，包括棋盘网格、坐标显示、三维模型姿态和安全状态区域。前端每 5 秒发送一次心跳消息，后端如果连续 10 秒没有收到心跳，则判定前端已断连并向 C++ 控制器发送安全停机指令。
+
+\noindent\textit{IPC 通信协议}
+
+后端与 C++ 实时控制进程通过 Unix Domain Socket 通信。协议使用自定义的二进制帧格式：2 字节帧头（\texttt{0xAA55}）用于帧同步，1 字节指令类型，2 字节载荷长度（小端序），可变长度载荷，1 字节异或校验和。指令类型包括：关节运动（载荷为 6 个 float64 目标角度，共 48 字节）、直角坐标运动（同样 48 字节目标位姿）、IO 设置（引脚编号和目标状态）、状态查询（无载荷）和急停（无载荷，C++ 端以最高优先级处理）。C++ 端用同样的帧格式返回状态帧，包含当前各轴角度、末端位姿、IO 状态和错误码。
+
+\subsubsection*{安全系统模块}
+
+用户画完自己的一步棋，后按下示教器上的物理启动按钮（DI 信号通过 IO 模块读入）。实时控制层收到信号后启动声光报警器（DO 输出）并通知后端，后端通过 WebSocket 推送给前端，前端安全状态区域变为红色并开始 3 秒倒计时显示。倒计时结束后机器人开始运动，前端安全区域变为黄色，声光和警告持续。运动期间视觉子系统持续做人员侵入检测，一旦检测到立即触发停机。机器人完成动作后回到预设安全位置，伺服抱闸，声光切换为安全提示，前端安全区域变为绿色，提示用户可以接近白板。
+
+\subsection{系统集成}
+
+\noindent\textit{通信架构}
+
+实时控制层（C++）与应用层（Python）之间通过 Unix Domain Socket 通信，使用上述自定义二进制协议传递运动指令、IO 控制、状态查询和急停等消息。应用层（Python FastAPI）与前端（Next.js）之间通过 HTTP REST API 处理控制类请求，通过 WebSocket 推送实时状态。实时控制层内部，EtherCAT 总线以 1ms 周期与所有伺服驱动器和 IO 模块同步通信。
+
+\noindent\textit{坐标系统}
+
+机器人基坐标系作为世界坐标系原点。手眼标定求解相机坐标系到基坐标系的变换矩阵。白板平面标定通过示教 3 到 4 个角点确定白板在基坐标系中的位置和姿态。所有绘制轨迹先在白板平面坐标系中以二维方式生成，代入平面方程得到三维坐标后变换到基坐标系，最后逆解为关节角。
+
+% ========================================================================
+%  五、实施与测试计划
+% ========================================================================
+\section{实施与测试计划}
+
+\subsection{实施计划}
+
+项目整体周期为 4 周，各阶段安排如下图所示。
+
+\begin{center}
+    \includegraphics[width=\linewidth]{images/gunt.png}
+\end{center}
+
+第一周搭建基础：调通 EtherCAT 通信和伺服控制，验证运动学模型，完成相机手眼标定，准备工具架。第二周实现核心功能：开发棋盘和 O/X 绘制轨迹，搭建 DINO/SAM2/GraspGen 抓取感知链路并调通马克笔抓取，实现棋盘状态视觉识别和人员侵入检测。第三周完善上层逻辑和界面：实现状态机和 Minimax AI，开发后端 API 和 WebSocket 接口，开发前端三个页面（自动、手动、设置）及安全状态显示，集成声光报警和安全流程。第四周联调和集成测试，修复问题，整理文档，准备验收演示。
+
+\subsection{测试评估方案}
+
+所有第三节定义的性能指标均为验收标准。分为三个层次进行测试：单元测试验证各模块的基本正确性，包括运动学正逆解一致性（正解后逆解再正解，查看差值）、决策搜索算法是否正确、视觉识别在不少于 50 张标注图片上的准确率、以及抓取链路各环节（DINO 检测框召回率、SAM2 分割质量、点云有效点比例）的达标情况。子系统测试验证集成后的表现，包括伺服跟踪精度、绘制精度（画直线测偏差、画圆测圆度）、GraspGen 抓姿生成和筛选通过率、连续 20 次马克笔抓取的成功次数、以及不同光照下视觉识别的稳定性。集成测试覆盖完整流程：至少 10 局对局（含胜、负、平三种情况），模拟人员侵入测试安全停机时间是否在 500ms 以内，以及长时间连续运行的稳定性。
+
+\subsection{系统维护}
+
+系统投入使用后需定期检查以下内容：气动系统（夹爪、空压机、气管接头）有无漏气；手眼标定精度是否因相机或白板位移而下降，必要时重新标定；马克笔墨水用尽后及时更换；OAK-D Pro 深度图质量是否出现问题（如果出现需调整光照或重新标定）。软件方面，系统运行日志和伺服驱动器报警记录应定期查阅。
+
+\subsection{同组人员分工}
+
+组内分工如下。成员 A 负责视觉与抓取感知子系统：OAK-D Pro 驱动与标定、棋盘和棋子识别算法、Grounding DINO 检测、SAM2 分割、深度图转点云、人员侵入检测。成员 B 负责实时控制层中的抓取执行：EtherCAT 主站搭建、伺服基础控制、IO 模块驱动、GraspGen 抓姿接入和筛选。成员 C 负责实时控制层中的绘制执行：运动学建模与求解、绘制轨迹生成、笛卡尔轨迹插补和接触控制。成员 D 负责实时控制层中的安全和辅助功能：安全监控逻辑、白板平面标定、擦除轨迹扩展。成员 E 负责后端服务和前端 UI 的全栈开发：FastAPI 后端搭建、REST API 和 WebSocket 接口、IPC 通信协议、状态机、Minimax AI 算法、Next.js + Fluent UI 前端三个页面的开发、Three.js 三维机械臂可视化、以及安全状态显示的实现。
+
+协作方面，成员 B、C、D 共同维护实时控制层代码仓库，统一伺服控制接口。成员 A 与 B 协作定义从点云到抓姿再到执行的数据格式。成员 A 与 E 协作定义视觉识别结果到决策逻辑的数据接口。成员 E 自行协调前后端之间的 API 规范。全组每周两次进度同步。
+
+% ========================================================================
+%  六、非技术因素
+% ========================================================================
+\section{非技术因素}
+
+\subsection{成本估算}
+
+主要设备（机器人、伺服、IO 模块、相机、夹爪、空压机、工控机、示教器）由课程组提供。需要额外采购的物品包括：A3 磁性白板约 40 元，多色白板马克笔和板擦约 50 元，3D 打印或铝型材拼装的工具架约 150 元，辅助三脚架和棋盘格标定板约 90 元，24V 声光报警器约 80 元，连接线材、端子、气管接头等杂项约 150 元。总预算控制在 600 元左右。
+
+\subsection{社会与环境影响}
+
+为最大化环保，白板马克笔选用低 VOC 型号，废弃笔芯可正常回收。噪音也是一项环境影响，空压机噪音通过配置消音器控制在 65dB(A) 以下，或者使用长气管配置在远处。
+
+项目本身是一个课程设计作品，在技术验证之外可以用于高校开放日或课堂演示，帮助参观者了解工业机器人的基本运作方式。
+
+\subsection{健康、安全与伦理问题}
+
+MOKA MR07S 自重大且不是协作臂，碰撞风险在第一节和第四节中已详细讨论。系统在软件层面设置了力矩和速度限制、视觉侵入检测，硬件层面有急停按钮和声光警报，操作流程上要求物理按钮确认和 3 秒等待期。前端界面上常驻的安全状态区域保证操作员随时了解机器人状态。重要的是，系统仅限经过培训的人员操作，使用前需签署安全承诺书。
+
+数据方面，OAK-D Pro 只对桌面工作区进行工具定位和人体骨架检测，不采集人脸或身份信息，不存储或上传任何图像数据。AI 决策则基于纯数学算法，决策过程透明可解释，符合人工智能伦理。
+
+\subsection{提交用户文档}
+
+项目交付时将附带以下文档：
+\begin{enumerate}[nosep]
+    \item 安全手册
+    \item 系统标准操作流程，包括上下电步骤和紧急处理流程
+    \item 部署说明，包括 Ubuntu 实时内核和软件本体及其依赖的部署流程
+    \item 标定操作手册
+    \item REST API 和 WebSocket 接口文档
+    \item 日常维护保养要求及检查清单
+\end{enumerate}
+
+\end{document}
