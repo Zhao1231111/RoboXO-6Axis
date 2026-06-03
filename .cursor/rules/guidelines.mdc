@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+---
+
+- 项目技术栈：Next.JS（纯静态构建），Fluent UI React，Tailwind。
+  使用 Tailwind 类，不要 useStyle。
+
+- 应用前端开发最佳实践。
+- 项目规模大，避免大范围扫描文件。
+- 不要尝试自己生成图片。
+- SubAgent 倾向于收敛于全量输出文件内容，这不很有帮助。如果使用 SubAgent，必须谨慎选择 Prompt。
+- 有任何不明确点，或在某处有多种可以采取的方案，询问用户，不要 Assume。
