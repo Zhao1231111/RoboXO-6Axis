@@ -16,6 +16,8 @@
 #include "probe_detect_tasks.h" // 引入任务声明
 #include "calibration_task.h" 
 #include "chessboard_tasks.h"
+#include "vision_client.h"
+#include "vision_guided_task.h"
 
 using namespace Eigen;
 using namespace std;
@@ -482,7 +484,8 @@ void test_robot_func() {
     // multi_joint_move_test(); // 原来的调用方式
     // run_task_state_machine(); // 新的任务状态机调用
     //run_calibration_task();
-    draw_tic_tac_toe_task();
+    // draw_tic_tac_toe_task();
+    run_vision_object_task();
 }
 
 // --- 启动 EtherCAT 主站 ---
@@ -582,6 +585,9 @@ int start_controller() {
 }
 
 int main(int argc, char* argv[]) {
+    if (argc >= 3 && strcmp(argv[1], "--vision-test") == 0) {
+        return run_vision_test(argv[2]);
+    }
     // 启动控制
     start_controller();
     return 0;
