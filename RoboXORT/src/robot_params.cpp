@@ -1,9 +1,13 @@
 #include "robot_params.h"
 #include <cmath>
+#include <cstdio>
 
 extern General_6S* g_general_6s;
 
 int L = 160;
+
+double csp_vel_limit_dps[6] = {5.0, 5.0, 5.0, 5.0, 5.0, 5.0};
+int    csp_max_inc_per_cycle[6] = {};
 
 void init_robot_params() {
     DH_param dh;
@@ -55,4 +59,13 @@ void init_robot_params() {
     }
 
     g_general_6s->set_param(motor_pa.encoder, motor_pa, dh, decare);
+}
+
+void compute_csp_limits() {
+    Encoder_Param ep = g_general_6s->get_encoder_param();
+    for (int i = 0; i < 6; i++) {
+        double deg_per_cycle = csp_vel_limit_dps[i] / 1000.0;
+        double inc_per_deg = ep.reducRatio[i] * (1 << ep.encoderResolution[i]) / 360.0;
+        csp_max_inc_per_cycle[i] = static_cast<int>(deg_per_cycle * inc_per_deg + 0.5);
+    }
 }

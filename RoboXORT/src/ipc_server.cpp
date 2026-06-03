@@ -212,6 +212,11 @@ void IPCServer::handle_connection(int client_fd) {
             send_ack(client_fd, hdr.sequence);
             break;
 
+        case MsgType::EStopReset:
+            dispatch_estop_reset();
+            send_ack(client_fd, hdr.sequence);
+            break;
+
         case MsgType::JointMove:
         case MsgType::CartesianMove:
             send_error(client_fd, hdr.sequence, 0x0001, "not implemented");
@@ -329,6 +334,10 @@ void IPCServer::dispatch_io_set(const IOSetPayload& payload) {
 void IPCServer::dispatch_estop() {
     g_estop.store(true, std::memory_order_release);
     g_jog_cmd.clear();
+}
+
+void IPCServer::dispatch_estop_reset() {
+    g_estop.store(false, std::memory_order_release);
 }
 
 } // namespace ipc

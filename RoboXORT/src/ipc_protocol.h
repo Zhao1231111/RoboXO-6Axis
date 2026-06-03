@@ -31,6 +31,7 @@ enum class MsgType : uint8_t {
     IOSet         = 0x05,
     StatusQuery   = 0x06,
     EStop         = 0x07,
+    EStopReset    = 0x08,
     StatusReport  = 0x81,
     Ack           = 0x82,
     Error         = 0x83,

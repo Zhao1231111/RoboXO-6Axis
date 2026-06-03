@@ -66,10 +66,17 @@ extern int  ec_power_state_machine;
 extern const struct timespec    ec_cycletime;
 
 // ============================================================================
+// Simulation Mode
+// ============================================================================
+
+extern bool g_sim_mode;
+
+// ============================================================================
 // EtherCAT Functions
 // ============================================================================
 
 int  ec_init();
+int  ec_init_sim();
 void ec_check_domain_state();
 void ec_check_master_state();
 void ec_check_slave_state(int slave_idx);

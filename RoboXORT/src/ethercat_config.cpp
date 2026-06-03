@@ -4,6 +4,12 @@
 #include <sys/mman.h>
 
 // ============================================================================
+// Simulation Mode
+// ============================================================================
+
+bool g_sim_mode = false;
+
+// ============================================================================
 // EtherCAT Global State
 // ============================================================================
 
@@ -210,4 +216,37 @@ void ec_check_slave_state(int slave_idx) {
     ecrt_slave_config_state(ec_sc[slave_idx], &s);
     if (s.operational == 1) ec_slave_op_flag[slave_idx] = 1;
     ec_sc_state[slave_idx] = s;
+}
+
+// ============================================================================
+// Simulation Mode Initialization
+// ============================================================================
+
+int ec_init_sim() {
+    static uint8_t sim_buffer[512] = {};
+    ec_domain_pd = sim_buffer;
+
+    unsigned int offset = 0;
+    for (int i = 0; i < NUM_SERVO_AXES; i++) {
+        ec_offsets.ctrl_word[i] = offset;                    offset += 2;
+        ec_offsets.operation_mode[i] = offset;               offset += 1;
+        ec_offsets.target_position[i] = offset;              offset += 4;
+        ec_offsets.touch_probe_function[i] = offset;         offset += 2;
+        ec_offsets.status_word[i] = offset;                  offset += 2;
+        ec_offsets.position_actual_value[i] = offset;        offset += 4;
+        ec_offsets.touch_probe_status[i] = offset;           offset += 2;
+        ec_offsets.touch_probe_pos1_pos_value[i] = offset;   offset += 4;
+        ec_offsets.digital_inputs[i] = offset;               offset += 4;
+        ec_offsets.torque_actual_value[i] = offset;          offset += 2;
+        ec_offsets.BC[i] = offset;                           offset += 4;
+        ec_offsets.F[i] = offset;                            offset += 2;
+    }
+    ec_offsets.io_out = offset; offset += 2;
+    ec_offsets.io_in = offset;  offset += 2;
+
+    for (int i = 0; i < NUM_SLAVES; i++)
+        ec_slave_op_flag[i] = 1;
+
+    ec_power_state_machine = 5;
+    return 0;
 }

@@ -7,6 +7,7 @@
 #include <thread>
 #include <deque>
 #include <cmath>
+#include <cstdlib>
 #include <Eigen/Eigen>
 #include "general_6s.h"
 #include "ethercat_config.h"
@@ -80,9 +81,9 @@ struct JogState {
     }
 };
 
-static constexpr double JOG_MAX_JOINT_SPEED_DPS = 30.0;
-static constexpr double JOG_MAX_CART_LINEAR_MPS = 50.0;
-static constexpr double JOG_MAX_CART_ANGULAR_DPS = 15.0;
+static constexpr double JOG_MAX_JOINT_SPEED_DPS = 10.0;
+static constexpr double JOG_MAX_CART_LINEAR_MPS = 10.0;
+static constexpr double JOG_MAX_CART_ANGULAR_DPS = 5.0;
 static constexpr double JOG_ACCEL_TIME_S = 0.2;
 static constexpr double JOG_JOINT_ACCEL = JOG_MAX_JOINT_SPEED_DPS / JOG_ACCEL_TIME_S;
 static constexpr double JOG_CART_LINEAR_ACCEL = JOG_MAX_CART_LINEAR_MPS / JOG_ACCEL_TIME_S;
@@ -128,11 +129,12 @@ static void cyclic_task() {
         wakeupTime = timespec_add(wakeupTime, ec_cycletime);
         clock_nanosleep(EC_CLOCK_TO_USE, TIMER_ABSTIME, &wakeupTime, NULL);
 
-        ecrt_master_application_time(ec_master, EC_TIMESPEC2NS(wakeupTime));
-        ecrt_master_receive(ec_master);
-        ecrt_domain_process(ec_domain);
-
-        ec_check_domain_state();
+        if (!g_sim_mode) {
+            ecrt_master_application_time(ec_master, EC_TIMESPEC2NS(wakeupTime));
+            ecrt_master_receive(ec_master);
+            ecrt_domain_process(ec_domain);
+            ec_check_domain_state();
+        }
 
         // --- Read actual positions and torques ---
         signed int actualInc[6];
@@ -169,55 +171,58 @@ static void cyclic_task() {
             g_general_6s->calc_forward_kin(jv, T);
             VectorXd c = g_general_6s->tr_2_MCS(T);
             for (int i = 0; i < 6; i++) tcp[i] = c(i);
+            for (int i = 3; i < 6; i++) tcp[i] = rad2deg(tcp[i]);
             uint32_t io = (uint32_t(io_in_val) << 16) | uint32_t(EC_READ_U16(ec_domain_pd + ec_offsets.io_out));
             g_shared_state.write(joints, tcp, io, ipc::SAFETY_ESTOP);
 
             goto cycle_end;
         }
 
-        // === Servo Power State Machine (periodic check) ===
-        if (status_check_counter > 0) {
-            status_check_counter--;
-        } else {
-            status_check_counter = EC_FREQUENCY * 2;
-            ec_check_master_state();
-            for (int i = 0; i < NUM_SLAVES; i++) ec_check_slave_state(i);
+        // === Servo Power State Machine ===
+        if (!g_sim_mode) {
+            if (status_check_counter > 0) {
+                status_check_counter--;
+            } else {
+                status_check_counter = EC_FREQUENCY * 2;
+                ec_check_master_state();
+                for (int i = 0; i < NUM_SLAVES; i++) ec_check_slave_state(i);
 
-            if (!PowerStatus && NeedPowerOn) {
-                bool all_op = true;
-                for (int i = 0; i < NUM_SERVO_AXES; i++) {
-                    if (!ec_slave_op_flag[i]) { all_op = false; break; }
-                }
+                if (!PowerStatus && NeedPowerOn) {
+                    bool all_op = true;
+                    for (int i = 0; i < NUM_SERVO_AXES; i++) {
+                        if (!ec_slave_op_flag[i]) { all_op = false; break; }
+                    }
 
-                if (all_op && ec_power_state_machine == 0) {
-                    for (int i = 0; i < 6; i++)
-                        EC_WRITE_U16(ec_domain_pd + ec_offsets.ctrl_word[i], 0x0080);
-                    ec_power_state_machine = 2;
-                } else if (ec_power_state_machine == 2) {
-                    for (int i = 0; i < 6; i++)
-                        EC_WRITE_U16(ec_domain_pd + ec_offsets.ctrl_word[i], 0x0006);
-                    ec_power_state_machine = 3;
-                } else if (ec_power_state_machine == 3) {
-                    for (int i = 0; i < 6; i++) {
-                        EC_WRITE_U16(ec_domain_pd + ec_offsets.ctrl_word[i], 0x0007);
-                        EC_WRITE_S8(ec_domain_pd + ec_offsets.operation_mode[i], CYCLIC_POSITION);
-                        EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], actualInc[i]);
+                    if (all_op && ec_power_state_machine == 0) {
+                        for (int i = 0; i < 6; i++)
+                            EC_WRITE_U16(ec_domain_pd + ec_offsets.ctrl_word[i], 0x0080);
+                        ec_power_state_machine = 2;
+                    } else if (ec_power_state_machine == 2) {
+                        for (int i = 0; i < 6; i++)
+                            EC_WRITE_U16(ec_domain_pd + ec_offsets.ctrl_word[i], 0x0006);
+                        ec_power_state_machine = 3;
+                    } else if (ec_power_state_machine == 3) {
+                        for (int i = 0; i < 6; i++) {
+                            EC_WRITE_U16(ec_domain_pd + ec_offsets.ctrl_word[i], 0x0007);
+                            EC_WRITE_S8(ec_domain_pd + ec_offsets.operation_mode[i], CYCLIC_POSITION);
+                            EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], actualInc[i]);
+                        }
+                        ec_power_state_machine = 4;
+                    } else if (ec_power_state_machine == 4) {
+                        for (int i = 0; i < 6; i++) {
+                            EC_WRITE_U16(ec_domain_pd + ec_offsets.ctrl_word[i], 0x000f);
+                            EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], actualInc[i]);
+                        }
+                        ec_power_state_machine = 5;
+                        PowerStatus = true;
+                        NeedPowerOn = false;
+                        position_initialized = true;
+                        for (int i = 0; i < 6; i++) hold_position[i] = actualInc[i];
+                        for (int i = 0; i < 6; i++)
+                            jog.jog_target_deg[i] = g_general_6s->getActPositionAngle(i);
+                        jog.cart_initialized = false;
+                        printf("伺服上电成功.\n");
                     }
-                    ec_power_state_machine = 4;
-                } else if (ec_power_state_machine == 4) {
-                    for (int i = 0; i < 6; i++) {
-                        EC_WRITE_U16(ec_domain_pd + ec_offsets.ctrl_word[i], 0x000f);
-                        EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], actualInc[i]);
-                    }
-                    ec_power_state_machine = 5;
-                    PowerStatus = true;
-                    NeedPowerOn = false;
-                    position_initialized = true;
-                    for (int i = 0; i < 6; i++) hold_position[i] = actualInc[i];
-                    for (int i = 0; i < 6; i++)
-                        jog.jog_target_deg[i] = g_general_6s->getActPositionAngle(i);
-                    jog.cart_initialized = false;
-                    printf("伺服上电成功.\n");
                 }
             }
         }
@@ -299,7 +304,8 @@ static void cyclic_task() {
                     }
 
                     double increment = jog.current_velocity * dt;
-                    jog.jog_target_cart[jog.axis] += increment;
+                    double cart_increment = (jog.axis >= 3) ? deg2rad(increment) : increment;
+                    jog.jog_target_cart[jog.axis] += cart_increment;
 
                     VectorXd ct(6);
                     for (int i = 0; i < 6; i++) ct(i) = jog.jog_target_cart[i];
@@ -328,7 +334,7 @@ static void cyclic_task() {
                             EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], inc);
                         }
                     } else {
-                        jog.jog_target_cart[jog.axis] -= increment;
+                        jog.jog_target_cart[jog.axis] -= cart_increment;
                         jog.current_velocity = 0.0;
                         jog.target_velocity = 0.0;
                         for (int i = 0; i < 6; i++)
@@ -381,6 +387,30 @@ static void cyclic_task() {
                 EC_WRITE_U16(ec_domain_pd + ec_offsets.io_out, current_io_out);
         }
 
+        // === CSP Velocity Clamp ===
+        {
+            static signed int prev_target[6] = {};
+            static bool clamp_initialized = false;
+            if (PowerStatus && !clamp_initialized) {
+                for (int i = 0; i < 6; i++)
+                    prev_target[i] = EC_READ_S32(ec_domain_pd + ec_offsets.target_position[i]);
+                clamp_initialized = true;
+            }
+            if (clamp_initialized) {
+                for (int i = 0; i < 6; i++) {
+                    signed int desired = EC_READ_S32(ec_domain_pd + ec_offsets.target_position[i]);
+                    signed int delta = desired - prev_target[i];
+                    if (abs(delta) > csp_max_inc_per_cycle[i]) {
+                        desired = prev_target[i] + (delta > 0 ? csp_max_inc_per_cycle[i] : -csp_max_inc_per_cycle[i]);
+                        EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], desired);
+                        hold_position[i] = desired;
+                        printf("[WARN] CSP clamp axis %d: delta=%d > limit=%d\n", i, delta, csp_max_inc_per_cycle[i]);
+                    }
+                    prev_target[i] = desired;
+                }
+            }
+        }
+
         // === Update Shared State ===
         {
             double joints[6], tcp[6];
@@ -391,6 +421,7 @@ static void cyclic_task() {
             g_general_6s->calc_forward_kin(jv, T);
             VectorXd c = g_general_6s->tr_2_MCS(T);
             for (int i = 0; i < 6; i++) tcp[i] = c(i);
+            for (int i = 3; i < 6; i++) tcp[i] = rad2deg(tcp[i]);
 
             uint32_t io = (uint32_t(io_in_val) << 16) | uint32_t(EC_READ_U16(ec_domain_pd + ec_offsets.io_out));
             uint8_t safety = (jog.active || !g_general_6s->get_angle_deque().empty())
@@ -399,15 +430,30 @@ static void cyclic_task() {
         }
 
     cycle_end:
-        if (sync_ref_counter > 0) {
-            sync_ref_counter--;
+        if (g_sim_mode) {
+            for (int i = 0; i < 6; i++) {
+                signed int t = EC_READ_S32(ec_domain_pd + ec_offsets.target_position[i]);
+                EC_WRITE_S32(ec_domain_pd + ec_offsets.position_actual_value[i], t);
+            }
+            static int sim_print_ctr = 0;
+            // if (++sim_print_ctr >= 100) {
+            //     sim_print_ctr = 0;
+            //     double ja[6];
+            //     for (int i = 0; i < 6; i++) ja[i] = g_general_6s->getActPositionAngle(i);
+            //     printf("[SIM] Joints: [%7.2f, %7.2f, %7.2f, %7.2f, %7.2f, %7.2f]\n",
+            //            ja[0], ja[1], ja[2], ja[3], ja[4], ja[5]);
+            // }
         } else {
-            sync_ref_counter = 1;
-            ecrt_master_sync_reference_clock(ec_master);
+            if (sync_ref_counter > 0) {
+                sync_ref_counter--;
+            } else {
+                sync_ref_counter = 1;
+                ecrt_master_sync_reference_clock(ec_master);
+            }
+            ecrt_master_sync_slave_clocks(ec_master);
+            ecrt_domain_queue(ec_domain);
+            ecrt_master_send(ec_master);
         }
-        ecrt_master_sync_slave_clocks(ec_master);
-        ecrt_domain_queue(ec_domain);
-        ecrt_master_send(ec_master);
     }
 }
 
@@ -418,6 +464,7 @@ static void cyclic_task() {
 static void print_usage(const char* prog) {
     printf("Usage: %s [OPTIONS]\n", prog);
     printf("Options:\n");
+    printf("  --sim       Run in simulation mode (no EtherCAT hardware required)\n");
     printf("  --no-ipc    Do not start the IPC server (for standalone RT testing)\n");
     printf("  --teleop    Start keyboard teleop interface instead of IPC\n");
     printf("  --help      Show this help message\n");
@@ -432,7 +479,9 @@ int main(int argc, char* argv[]) {
     bool enable_teleop = false;
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--no-ipc") == 0) {
+        if (strcmp(argv[i], "--sim") == 0) {
+            g_sim_mode = true;
+        } else if (strcmp(argv[i], "--no-ipc") == 0) {
             enable_ipc = false;
         } else if (strcmp(argv[i], "--teleop") == 0) {
             enable_teleop = true;
@@ -455,12 +504,28 @@ int main(int argc, char* argv[]) {
     printf("算法对象初始化成功.\n");
 
     init_robot_params();
+    compute_csp_limits();
     printf("机器人参数配置完成.\n");
 
-    // 2. Initialize EtherCAT
-    if (ec_init() != 0) {
-        fprintf(stderr, "EtherCAT 初始化失败!\n");
-        return 1;
+    // 2. Initialize EtherCAT (or simulation)
+    if (g_sim_mode) {
+        if (ec_init_sim() != 0) {
+            fprintf(stderr, "仿真模式初始化失败!\n");
+            return 1;
+        }
+        for (int i = 0; i < 6; i++) {
+            signed int inc;
+            g_general_6s->angleToInc(0.0, inc, i);
+            EC_WRITE_S32(ec_domain_pd + ec_offsets.position_actual_value[i], inc);
+            EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], inc);
+        }
+        PowerStatus = true;
+        printf("[SIM] 现在是仿真模式.\n");
+    } else {
+        if (ec_init() != 0) {
+            fprintf(stderr, "EtherCAT 初始化失败!\n");
+            return 1;
+        }
     }
 
     // 3. Start RT cyclic task in a dedicated thread
@@ -474,27 +539,29 @@ int main(int argc, char* argv[]) {
         cyclic_task();
     });
 
-    // 4. Wait for slaves to reach OP state
-    printf("等待从站进入 OP 状态...\n");
-    for (int wait = 0; wait < 30; wait++) {
-        bool all_op = true;
-        for (int i = 0; i < NUM_SERVO_AXES; i++) {
-            if (!ec_slave_op_flag[i]) { all_op = false; break; }
+    // 4. Wait for slaves to reach OP state (skip in sim mode)
+    if (!g_sim_mode) {
+        printf("等待从站进入 OP 状态...\n");
+        for (int wait = 0; wait < 30; wait++) {
+            bool all_op = true;
+            for (int i = 0; i < NUM_SERVO_AXES; i++) {
+                if (!ec_slave_op_flag[i]) { all_op = false; break; }
+            }
+            if (all_op) {
+                printf("所有从站已就绪，耗时 %d 秒.\n", wait);
+                break;
+            }
+            sleep(1);
+            if (wait == 29) printf("警告: 等待从站 OP 超时 (30秒)!\n");
         }
-        if (all_op) {
-            printf("所有从站已就绪，耗时 %d 秒.\n", wait);
-            break;
-        }
-        sleep(1);
-        if (wait == 29) printf("警告: 等待从站 OP 超时 (30秒)!\n");
-    }
 
-    // 5. Request servo power on
-    NeedPowerOn = true;
-    printf("请求伺服上电...\n");
-    for (int wait = 0; wait < 10; wait++) {
-        if (PowerStatus) { printf("伺服上电完成.\n"); break; }
-        sleep(1);
+        // 5. Request servo power on
+        NeedPowerOn = true;
+        printf("请求伺服上电...\n");
+        for (int wait = 0; wait < 10; wait++) {
+            if (PowerStatus) { printf("伺服上电完成.\n"); break; }
+            sleep(1);
+        }
     }
 
     // 6. Start interface (IPC server or teleop)

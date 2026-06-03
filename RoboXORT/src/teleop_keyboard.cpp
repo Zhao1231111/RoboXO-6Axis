@@ -87,6 +87,7 @@ void run_teleop() {
                    state.joints_deg[0], state.joints_deg[1], state.joints_deg[2],
                    state.joints_deg[3], state.joints_deg[4], state.joints_deg[5]);
         }
+        // printf("\n");
         fflush(stdout);
     };
 

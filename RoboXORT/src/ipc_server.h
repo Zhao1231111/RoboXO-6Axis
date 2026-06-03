@@ -55,6 +55,7 @@ private:
     void dispatch_jog_stop();
     void dispatch_io_set(const IOSetPayload& payload);
     void dispatch_estop();
+    void dispatch_estop_reset();
 
     int listen_fd_ = -1;
     std::atomic<bool> running_{false};
