@@ -343,21 +343,28 @@ static void cyclic_task() {
                     }
                 }
             } else if (!g_general_6s->get_angle_deque().empty()) {
-                // Legacy trajectory playback
+                // Angle Deque 轨迹处理
+                
                 for (int i = 0; i < 6; i++) {
                     signed int target_inc = g_general_6s->set_target_pos_to_servo(i);
                     hold_position[i] = target_inc;
+                    // 写入目标位置
                     EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], target_inc);
+                    // 读取实时力矩并记录
                     actualTor[i] = EC_READ_S16(ec_domain_pd + ec_offsets.torque_actual_value[i]);
                     tor_deque_out.push_back(actualTor[i]);
                     angle_deque_out.push_back(g_general_6s->getActPositionAngle(i));
                 }
+
+                // --- 接触检测逻辑 ---
                 if (is_touch_probing && !touch_detected) {
+                    // 判断 J2(i=1) 或 J3(i=2) 是否受力突变
                     if (abs(actualTor[1] - baseline_tor[1]) > 1.5 * TORQUE_THRESHOLD ||
                         abs(actualTor[2] - baseline_tor[2]) > TORQUE_THRESHOLD) {
                         trigger_tor_1 = actualTor[1];
                         trigger_tor_2 = actualTor[2];
                         touch_detected = true;
+                        // 在 EtherCAT 线程内部清空队列，保证线程安全，防止 double free！
                         g_general_6s->get_angle_deque().clear();
                     }
                 }
