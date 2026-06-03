@@ -209,9 +209,12 @@ void draw_tic_tac_toe_task() {
     double pen_z = board_center_cartesian(2);
     grasp_pen(pen_target, pen_z);
 
-    
+    VectorXd temp(6);
+    temp = board_center_cartesian;
+    temp(2) += 50;
 
-    ptp_motion_to_cartesian_base(board_center_cartesian);
+    ptp_motion_to_cartesian_base(temp);
+    lining_motion_test(0.0, 0.0, 50.0);
     if (!probe_and_press(100, pen_z)) {
         return; // 如果探测失败，则直接退出任务
     }
