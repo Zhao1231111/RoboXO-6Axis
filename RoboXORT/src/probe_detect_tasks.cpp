@@ -164,7 +164,7 @@ void run_task_state_machine() {
     VectorXd wipe_joint_target(6);
     VectorXd wipe_cartesian_target(6);
     // 在当前 X 轴方向平移 100mm (0.1m)
-    lining_motion_test(100.0, 0.0, 0.0, origin_point_joint, origin_cartesian, wipe_joint_target, wipe_cartesian_target);
+    lining_motion_test(100.0, 0.0, 0.0);
     
     // ------------------- 7. 任务完成与复位 -------------------
     cout << "\n[任务完成] 擦除动作结束！正在抬起画笔并返回原点..." << endl;

@@ -457,15 +457,19 @@ void grasp_object(VectorXd target_point_cartesian, double drop_height) {
 void grasp_pen(VectorXd target_point_cartesian, double &out_z_height){
     cout << "\n 移动到马克笔中心上方..." << endl;
     VectorXd top_center = target_point_cartesian;
-    top_center(2) += 120; // original: 70
+    top_center(2) = 370.015; // original: 70
     ptp_motion_to_cartesian_base(top_center);
 
+    cout << "\n[交互] 已移动到物体上方，准备下移并开始抓取" << endl;
+    string temp_input;
+    cin >> temp_input;
+
+
     // 抓取物体
-    grasp_object(top_center, 60); // original: 75
+    grasp_object(top_center, 370.015 - 355.016); // original: 75
 
     // 等待用户输入确认后再继续
     cout << "\n[交互] 抓取完成。请输入任意字符并按回车键，继续执行智能下探..." << endl;
-    string temp_input;
     cin >> temp_input;
 
     // 智能下探与按压
@@ -479,6 +483,11 @@ void grasp_eraser(VectorXd target_point_cartesian, double &out_z_height){
     VectorXd top_center = target_point_cartesian;
     top_center(2) += 90; // original: 70
     ptp_motion_to_cartesian_base(top_center);
+
+    cout << "\n[交互] 已移动到物体上方，准备下移并开始抓取" << endl;
+    string temp_input;
+    cin >> temp_input;
+
 
     // 抓取物体
     grasp_object(top_center, 95); // original: 75

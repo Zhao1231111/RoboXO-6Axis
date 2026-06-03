@@ -188,6 +188,8 @@ void draw_tic_tac_toe_task() {
     int dummy_torque = 150;
     
     load_task_config(board_center_cartesian, dummy_target, dummy_torque);
+    VectorXd origin_cartesian(6);
+    origin_cartesian = board_center_cartesian;
     
     // 修正棋盘中心位姿，强制设为笔尖向下 (RX = 180度, RY = 0, RZ = 0)
     // 这样在 draw_chessboard 和 draw_x/o 时，所有的点都会自动继承这个向下姿态！
@@ -202,7 +204,11 @@ void draw_tic_tac_toe_task() {
     // 抓取画笔
     double pen_z = board_center_cartesian(2);
     grasp_pen(board_center_cartesian, pen_z);
-    
+
+    // temp
+    double eraser_z = origin_cartesian(2);
+    // grasp_eraser(origin_cartesian, eraser_z);
+
     
     // 更新棋盘中心坐标（使后续所有绘图都基于刚刚检测到的实际接触高度）
     board_center_cartesian(2) = pen_z;
@@ -255,7 +261,7 @@ void draw_tic_tac_toe_task() {
     }
     // =================================================
 
-    double eraser_z = board_center_cartesian(2);
+    // double eraser_z = board_center_cartesian(2);
     grasp_eraser(board_center_cartesian, eraser_z);
     
     // 更新棋盘中心坐标（使后续所有动作基于擦除高度）
