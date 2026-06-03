@@ -14,4 +14,5 @@ export const MOCK_ROBOT_STATE: RobotState = {
   countdown: 0,
   score: { wins: 2, losses: 1, draws: 0 },
   ipcConnected: true,
+  ioState: 0,
 };

@@ -26,6 +26,12 @@ const SAFETY_CONFIGS: Record<SafetyState, SafetyConfig> = {
     title: "警告",
     description: "挤压危险：机械臂在移动",
   },
+  estop: {
+    bgColor: "#9B2423",
+    textColor: "#FFFFFF",
+    title: "急停",
+    description: "急停已触发，请手动复位",
+  },
   disconnected: {
     bgColor: "#D05D29",
     textColor: "#FFFFFF",

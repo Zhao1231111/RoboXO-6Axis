@@ -112,7 +112,9 @@ export default function SafetyIcon({ state }: { state: SafetyState }) {
       return <img src="/icons/ISO_7010_P004.svg" alt="countdown" className="h-full" />;
     case "moving":
       return <img src="/icons/ISO_7010_W019.svg" alt="countdown" className="h-full" />;
+    case "estop":
+      return <img src="/icons/ISO_7010_P010.svg" alt="estop" className="h-full" />;
     case "disconnected":
-      return <img src="/icons/ISO_7010_W018.svg" alt="countdown" className="h-full" />;
+      return <img src="/icons/ISO_7010_W018.svg" alt="disconnected" className="h-full" />;
   }
 }

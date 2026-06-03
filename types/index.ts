@@ -1,4 +1,9 @@
-export type SafetyState = "braked" | "countdown" | "moving" | "disconnected";
+export type SafetyState =
+  | "braked"
+  | "countdown"
+  | "moving"
+  | "estop"
+  | "disconnected";
 
 export type CellValue = null | "O" | "X";
 
@@ -37,6 +42,7 @@ export interface RobotState {
   joints: number[];
   cartesian: CartesianPose;
   gripper: GripperState;
+  ioState: number;
   board: BoardState;
   gamePhase: GamePhase;
   safetyState: SafetyState;
@@ -44,3 +50,84 @@ export interface RobotState {
   score: Score;
   ipcConnected: boolean;
 }
+
+/** Wire format matching the backend WebSocket JSON message. */
+export interface WsMessage {
+  joints_deg: number[];
+  tcp_mm_deg: number[];
+  gripper: "open" | "closed";
+  io_state: number;
+  board: number[][];
+  phase: string;
+  safety: string;
+  alarm_countdown: number;
+}
+
+const BOARD_VALUE_MAP: Record<number, CellValue> = {
+  0: null,
+  1: "O",
+  2: "X",
+};
+
+export function wsMessageToRobotState(msg: WsMessage): Partial<RobotState> {
+  const tcp = msg.tcp_mm_deg;
+  const cartesian: CartesianPose = {
+    x: tcp[0] ?? 0,
+    y: tcp[1] ?? 0,
+    z: tcp[2] ?? 0,
+    rx: tcp[3] ?? 0,
+    ry: tcp[4] ?? 0,
+    rz: tcp[5] ?? 0,
+  };
+
+  let safetyState: SafetyState;
+  if (msg.alarm_countdown > 0) {
+    safetyState = "countdown";
+  } else {
+    switch (msg.safety) {
+      case "braked":
+        safetyState = "braked";
+        break;
+      case "moving":
+        safetyState = "moving";
+        break;
+      case "estop":
+        safetyState = "estop";
+        break;
+      default:
+        safetyState = "braked";
+    }
+  }
+
+  const board: BoardState = msg.board.map((row) =>
+    row.map((v) => BOARD_VALUE_MAP[v] ?? null)
+  );
+
+  return {
+    joints: msg.joints_deg,
+    cartesian,
+    gripper: msg.gripper,
+    ioState: msg.io_state,
+    board,
+    gamePhase: (msg.phase as GamePhase) || "idle",
+    safetyState,
+    countdown: msg.alarm_countdown,
+  };
+}
+
+export const DEFAULT_ROBOT_STATE: RobotState = {
+  joints: [0, 0, 0, 0, 0, 0],
+  cartesian: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },
+  gripper: "open",
+  ioState: 0,
+  board: [
+    [null, null, null],
+    [null, null, null],
+    [null, null, null],
+  ],
+  gamePhase: "idle",
+  safetyState: "disconnected",
+  countdown: 0,
+  score: { wins: 0, losses: 0, draws: 0 },
+  ipcConnected: false,
+};
