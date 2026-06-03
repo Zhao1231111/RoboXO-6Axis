@@ -201,29 +201,65 @@ void draw_tic_tac_toe_task() {
     move_home_position();
 
     // 抓取画笔
-    // double pen_z = board_center_cartesian(2);
-    // grasp_pen(board_center_cartesian, pen_z);
+    double pen_z = board_center_cartesian(2);
+    grasp_pen(board_center_cartesian, pen_z);
     
     
-    // // 更新棋盘中心坐标（使后续所有绘图都基于刚刚检测到的实际接触高度）
-    // board_center_cartesian(2) = pen_z;
+    // 更新棋盘中心坐标（使后续所有绘图都基于刚刚检测到的实际接触高度）
+    board_center_cartesian(2) = pen_z;
     
     // 画棋盘
-    // draw_chessboard(board_center_cartesian);
+    draw_chessboard(board_center_cartesian);
     
-    // cout << "\n[动作 3] 回归安全点..." << endl;
-    // move_home_position();
+    cout << "\n[动作 3] 回归安全点..." << endl;
+    move_home_position();
     
-    // draw_x(board_center_cartesian, 0);
-    // move_home_position();
-    
-    // draw_o(board_center_cartesian, 4);
-    // move_home_position();
+    // ================== 用户交互循环 ==================
+    while (true) {
+        cout << "\n===============================" << endl;
+        cout << "请输入下一步指令: " << endl;
+        cout << "  x [0-8] : 在指定格子画 X (例: x 4)" << endl;
+        cout << "  o [0-8] : 在指定格子画 O (例: o 0)" << endl;
+        cout << "  e       : 结束绘画，开始擦除" << endl;
+        cout << "指令> ";
+        
+        string cmd;
+        cin >> cmd;
+        
+        if (cmd == "e" || cmd == "E") {
+            cout << "退出绘画模式..." << endl;
+            break;
+        } else if (cmd == "x" || cmd == "X") {
+            int pos;
+            cin >> pos;
+            if (pos >= 0 && pos <= 8) {
+                draw_x(board_center_cartesian, pos);
+                move_home_position();
+            } else {
+                cout << "位置错误：请输入 0~8 的数字！" << endl;
+            }
+        } else if (cmd == "o" || cmd == "O") {
+            int pos;
+            cin >> pos;
+            if (pos >= 0 && pos <= 8) {
+                draw_o(board_center_cartesian, pos);
+                move_home_position();
+            } else {
+                cout << "位置错误：请输入 0~8 的数字！" << endl;
+            }
+        } else {
+            cout << "未知指令，请重新输入！" << endl;
+            // 清理输入流，防止死循环
+            cin.clear();
+            cin.ignore(10000, '\n');
+        }
+    }
+    // =================================================
 
     double eraser_z = board_center_cartesian(2);
     grasp_eraser(board_center_cartesian, eraser_z);
     
-    // 更新棋盘中心坐标（使后续所有绘图都基于刚刚检测到的实际接触高度）
+    // 更新棋盘中心坐标（使后续所有动作基于擦除高度）
     board_center_cartesian(2) = eraser_z;
 
     cout << "\n[动作 5] 开始执行擦除动作..." << endl;
@@ -238,8 +274,7 @@ void draw_tic_tac_toe_task() {
     // 在当前 X 轴方向平移 100mm (0.1m)
     lining_motion_test(100.0, 0.0, 0.0, origin_point_joint, origin_cartesian, wipe_joint_target, wipe_cartesian_target);
     
-    // draw_x(board_center_cartesian, 8);
-    // move_home_position();
+    move_home_position();
 
     cout << "\n========== 井字棋任务圆满结束 ==========" << endl;
 }

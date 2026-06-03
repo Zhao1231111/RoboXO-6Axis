@@ -451,6 +451,11 @@ void grasp_pen(VectorXd target_point_cartesian, double &out_z_height){
     // 抓取物体
     grasp_object(top_center, 60); // original: 75
 
+    // 等待用户输入确认后再继续
+    cout << "\n[交互] 抓取完成。请输入任意字符并按回车键，继续执行智能下探..." << endl;
+    string temp_input;
+    cin >> temp_input;
+
     // 智能下探与按压
     if (!probe_and_press(100, out_z_height)) {
         return; // 如果探测失败，则直接退出任务
