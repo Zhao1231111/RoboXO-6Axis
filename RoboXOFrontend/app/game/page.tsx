@@ -3,7 +3,7 @@
 import { useState } from "react";
 import SafetyStatusBar from "@/components/SafetyStatusBar";
 import Board from "@/components/Board";
-import RobotViewPlaceholder from "@/components/RobotViewPlaceholder";
+import RobotView3D from "@/components/RobotView3D";
 import GameControls from "@/components/GameControls";
 import { useRobotStateQuery } from "@/lib/api";
 import { MOCK_ROBOT_STATE } from "@/lib/mock-data";
@@ -35,7 +35,7 @@ export default function GamePage() {
           <Board board={board} />
         </div>
 
-        <RobotViewPlaceholder className="h-full" />
+        <RobotView3D joints={wsState.joints} className="h-full" />
 
         <GameControls
           difficulty={difficulty}

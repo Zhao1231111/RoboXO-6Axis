@@ -126,6 +126,14 @@ export const api = createApi({
       query: () => ({ url: "/api/robot/estop", method: "POST" }),
     }),
 
+    ioSet: builder.mutation<void, { pin: number; value: number }>({
+      query: (body) => ({
+        url: "/api/robot/io",
+        method: "POST",
+        body,
+      }),
+    }),
+
     systemStatus: builder.query<SystemStatus, void>({
       query: () => "/api/system/status",
     }),
@@ -137,5 +145,6 @@ export const {
   useJogMutation,
   useJogStopMutation,
   useEstopMutation,
+  useIoSetMutation,
   useSystemStatusQuery,
 } = api;

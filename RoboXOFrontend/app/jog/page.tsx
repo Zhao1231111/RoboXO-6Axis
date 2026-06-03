@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import RobotViewPlaceholder from "@/components/RobotViewPlaceholder";
+import RobotView3D from "@/components/RobotView3D";
 import SpeedSelector from "@/components/SpeedSelector";
 import JointJogPanel from "@/components/JointJogPanel";
 import CartesianJogPanel from "@/components/CartesianJogPanel";
@@ -15,7 +15,7 @@ export default function JogPage() {
 
   return (
     <div className="flex h-full gap-4 p-4">
-      <RobotViewPlaceholder className="w-[40%] shrink-0" />
+      <RobotView3D joints={state.joints} className="w-[40%] shrink-0" />
 
       <div className="flex-1 flex flex-col gap-3 min-w-0">
         <SpeedSelector value={speed} onChange={setSpeed} />
