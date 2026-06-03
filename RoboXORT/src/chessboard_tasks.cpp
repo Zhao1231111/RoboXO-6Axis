@@ -92,8 +92,7 @@ static void draw_segment_on_plane(double x0, double y0, double x1, double y1,
     double dy = y1 - current_cartesian(1);
     double dz = draw_z - current_cartesian(2); 
     
-    VectorXd dummy_j(6), dummy_c(6);
-    lining_motion_test(dx, dy, dz, current_joint, current_cartesian, dummy_j, dummy_c);
+    lining_motion_test(dx, dy, dz);
     
     // 画完后抬起画笔
     lift_pen(draw_z, pen_lift, draw_pose);
@@ -263,16 +262,9 @@ void draw_tic_tac_toe_task() {
     board_center_cartesian(2) = eraser_z;
 
     cout << "\n[动作 5] 开始执行擦除动作..." << endl;
-    VectorXd origin_point_joint(6);
-    for (int i = 0; i < 6; i++) origin_point_joint(i) = g_general_6s->getActPositionAngle(i);
-    MatrixXd trans_matrix;
-    g_general_6s->calc_forward_kin(origin_point_joint, trans_matrix);
-    VectorXd origin_cartesian = g_general_6s->tr_2_MCS(trans_matrix);
     
-    VectorXd wipe_joint_target(6);
-    VectorXd wipe_cartesian_target(6);
     // 在当前 X 轴方向平移 100mm (0.1m)
-    lining_motion_test(100.0, 0.0, 0.0, origin_point_joint, origin_cartesian, wipe_joint_target, wipe_cartesian_target);
+    lining_motion_test(100.0, 0.0, 0.0);
     
     move_home_position();
 

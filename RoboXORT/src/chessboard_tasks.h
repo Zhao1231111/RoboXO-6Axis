@@ -12,7 +12,7 @@ using namespace std;
 
 extern General_6S* g_general_6s;
 
-#define BOARD_SIZE_MM              500.0   // 棋盘总边长：50 cm × 50 cm
+#define BOARD_SIZE_MM              400.0   // 棋盘总边长：50 cm × 50 cm
 #define BOARD_PEN_LIFT_MM          20.0    // 抬笔高度
 #define BOARD_MARK_RATIO           0.32    // X/O 占单格半宽比例，建议 0.25~0.40
 #define BOARD_O_SEGMENTS           72      // O 的折线段数，越大越圆

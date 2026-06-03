@@ -41,7 +41,7 @@ void multi_joint_move_test();
  * @param target_point_cartesian_coordinate 返回：终点的笛卡尔位姿
  * @return 计算得到的终点笛卡尔位姿
  */
-VectorXd lining_motion_test(double x, double y, double z, VectorXd origin_point_angle_degree, VectorXd origin_point_cartesian_coordinate, VectorXd &target_point_joint_test, VectorXd &target_point_cartesian_coordinate);
+VectorXd lining_motion_test(double x, double y, double z);
 
 /**
  * @brief 在笛卡尔坐标系下的圆弧插补运动，基于当前位姿和两个相对点三点定圆弧

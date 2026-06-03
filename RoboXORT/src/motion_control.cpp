@@ -153,8 +153,20 @@ void multi_joint_move_test() {
 
 }
 
-VectorXd lining_motion_test(double x,double y,double z,VectorXd origin_point_angle_degree,VectorXd origin_point_cartesian_coordinate,VectorXd &target_point_joint_test,VectorXd &target_point_cartesian_coordinate)
+VectorXd lining_motion_test(double x, double y, double z)
 {
+    // 获取当前关节角和位姿
+    VectorXd origin_point_angle_degree(6);
+    for (int i = 0; i < 6; i++) {
+        origin_point_angle_degree(i) = g_general_6s->getActPositionAngle(i);
+    }
+    MatrixXd tm;
+    g_general_6s->calc_forward_kin(origin_point_angle_degree, tm);
+    VectorXd origin_point_cartesian_coordinate = g_general_6s->tr_2_MCS(tm);
+
+    VectorXd target_point_joint_test(6);
+    VectorXd target_point_cartesian_coordinate(6);
+
     double velocity_current_rectangular;	       // 当前速度
     double acceleration_current_rectangular;	   // 当前加速度
     MatrixXd trans_matrix;                         // 存储正解矩阵   
