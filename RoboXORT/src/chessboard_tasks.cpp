@@ -57,8 +57,8 @@ static void lift_pen(double draw_z, double pen_lift, const VectorXd &draw_pose) 
     ptp_motion_to_cartesian_base(lifted);
 }
 
-// 移动画笔到指定 XY 坐标的上方，然后再垂直下笔，并返回真实的触板高度
-static double move_pen_to_xy_without_drawing(double x, double y, double draw_z, double pen_lift, const VectorXd &draw_pose) {
+// 移动画笔到指定 XY 坐标的上方，然后再垂直下笔
+static void move_pen_to_xy_without_drawing(double x, double y, double draw_z, double pen_lift, const VectorXd &draw_pose) {
     const double safe_z = draw_z + pen_lift;
     
     // 1. 抬起笔
@@ -72,27 +72,25 @@ static double move_pen_to_xy_without_drawing(double x, double y, double draw_z, 
     copy_pose_orientation(draw_pose, above_target);
     ptp_motion_to_cartesian_base(above_target);
     
-    // 3. 垂直下放画笔进行下探
-    double z;
-    probe_and_press(50, z);
-    
-    return z; // 返回真实探测到的高度
+    // 3. 垂直下放画笔
+    VectorXd down = above_target;
+    down(2) = draw_z;
+    ptp_motion_to_cartesian_base(down);
 }
 
 // 在平面上绘制一条线段
 static void draw_segment_on_plane(double x0, double y0, double x1, double y1,
                                   double draw_z, double pen_lift,
                                   const VectorXd &draw_pose) {
-    // 移到起点并下笔，记录下真实的接触高度
-    double actual_z = move_pen_to_xy_without_drawing(x0, y0, draw_z, pen_lift, draw_pose);
+    // 移到起点并下笔
+    move_pen_to_xy_without_drawing(x0, y0, draw_z, pen_lift, draw_pose);
     
     // 直线运动到终点
+    VectorXd current_joint = get_current_joint();
     VectorXd current_cartesian = get_current_cartesian();
     double dx = x1 - current_cartesian(0);
     double dy = y1 - current_cartesian(1);
-    
-    // 强制 dz 为 0，保证在当前检测到的平面上完全水平地拖拽画笔
-    double dz = 0.0; 
+    double dz = draw_z - current_cartesian(2); 
     
     lining_motion_test(dx, dy, dz);
     
