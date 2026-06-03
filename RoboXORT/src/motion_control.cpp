@@ -475,7 +475,7 @@ void grasp_pen(VectorXd target_point_cartesian, double &out_z_height){
     cin >> temp_input;
 
     // 抓取物体
-    grasp_object(top_center, 370.015 + 50.0 - 355.016); // original: 75
+    grasp_object(top_center, 370.015 + 50.0 - 353.516); // original: 75
 
     // 等待用户输入确认后再继续
     cout << "\n[交互] 抓取完成。请输入任意字符并按回车键，继续执行智能下探..." << endl;

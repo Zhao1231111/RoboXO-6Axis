@@ -224,8 +224,8 @@ void draw_tic_tac_toe_task() {
     // 1. 获取棋盘中心配置
     VectorXd board_center_cartesian(6), pen_target(6), eraser_target(6);
     board_center_cartesian << 527.299, -0.492295, 330.026, 3.14159, 0.0, 0.0;
-    pen_target << 622.292, -257.495, 370.013, 3.14159, 0.0, 0.0;
-    eraser_target << 622.292, -257.495, 370.013, 3.14159, 0.0, 0.0;
+    pen_target << 527.294, -257.495, 370.013, 3.14159, 0.0, 0.0;
+    eraser_target << 527.294, 249.506, 330.013, 3.14159, 0.0, 0.0;
 
     VectorXd origin_cartesian(6);
     origin_cartesian = board_center_cartesian;

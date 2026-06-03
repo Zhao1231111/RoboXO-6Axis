@@ -30,11 +30,15 @@ void run_calibration_task() {
     cout << "\n[动作 1] 正在移动到默认基准点..." << endl;
     
     // 设定默认初始坐标 (为了保持一致，采用与原任务相似的坐标)
-    VectorXd target_cartesian_base(6);
+    VectorXd target_cartesian_base(6), pen_target(6);
     target_cartesian_base << 527.299, -0.492596, 330.016, 3.14159, 0.0, 0.0;
+    pen_target << 527.294, -257.495, 370.013, 3.14159, 0.0, 0.0;
+
+
     
     // 阻塞式移动到起始点
-    ptp_motion_to_cartesian_base(target_cartesian_base);
+    ptp_motion_to_cartesian_base(pen_target);
+    set_gripper(true);
     cout << " -> 已到达起始基准点！" << endl;
 
     // ------------------- 2. 交互式微调循环 -------------------
