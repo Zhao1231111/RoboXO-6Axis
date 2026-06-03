@@ -74,7 +74,7 @@ static double move_pen_to_xy_without_drawing(double x, double y, double draw_z, 
     
     // 3. 垂直下放画笔进行下探
     double z;
-    probe_and_press(120, z);
+    probe_and_press(150, z);
     
     return z; // 返回真实探测到的高度
 }
@@ -214,7 +214,7 @@ void draw_tic_tac_toe_task() {
     temp(2) += 50;
 
     ptp_motion_to_cartesian_base(temp);
-    lining_motion_test(0.0, 0.0, 50.0);
+    lining_motion_test(0.0, 0.0, -50.0);
     if (!probe_and_press(100, pen_z)) {
         return; // 如果探测失败，则直接退出任务
     }
