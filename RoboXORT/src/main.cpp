@@ -541,7 +541,7 @@ static void print_usage(const char* prog) {
     printf("Usage: %s [OPTIONS]\n", prog);
     printf("Options:\n");
     printf("  --sim       Run in simulation mode (no EtherCAT hardware required)\n");
-    printf("  --no-ipc    Do not start the IPC server (for standalone RT testing)\n");
+    printf("  --ipc       Start the IPC server (If none, does test_robot_func)\n");
     printf("  --teleop    Start keyboard teleop interface instead of IPC\n");
     printf("  --help      Show this help message\n");
 }
@@ -551,14 +551,14 @@ static void print_usage(const char* prog) {
 // ============================================================================
 
 int main(int argc, char* argv[]) {
-    bool enable_ipc = true;
+    bool enable_ipc = false;
     bool enable_teleop = false;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--sim") == 0) {
             g_sim_mode = true;
-        } else if (strcmp(argv[i], "--no-ipc") == 0) {
-            enable_ipc = false;
+        } else if (strcmp(argv[i], "--ipc") == 0) {
+            enable_ipc = true;
         } else if (strcmp(argv[i], "--teleop") == 0) {
             enable_teleop = true;
             enable_ipc = false;  // teleop replaces IPC
@@ -656,7 +656,8 @@ int main(int argc, char* argv[]) {
         rt_thread.detach();
         return 0;
     } else {
-        printf("系统就绪 (--no-ipc 模式，无 IPC 服务).\n");
+        printf("系统就绪 (IPC 服务未启动).\n");
+        test_robot_func();
     }
 
     // 7. Main thread: wait for signal
