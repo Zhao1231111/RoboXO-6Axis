@@ -74,7 +74,7 @@ static double move_pen_to_xy_without_drawing(double x, double y, double draw_z, 
     
     // 3. 垂直下放画笔进行下探
     double z;
-    probe_and_press(50, z);
+    probe_and_press(120, z);
     
     return z; // 返回真实探测到的高度
 }
@@ -188,6 +188,8 @@ void draw_tic_tac_toe_task() {
     board_center_cartesian << 0.5, 0.0, 0.3, 0.0, 0.0, 0.0;
     VectorXd dummy_target(6);
     int dummy_torque = 150;
+    VectorXd pen_target(6);
+    pen_target << 622.292, -257.495, 370.013, 3.14159, -3.0319e-05, 1.09756e-05;
     
     load_task_config(board_center_cartesian, dummy_target, dummy_torque);
     VectorXd origin_cartesian(6);
@@ -205,7 +207,14 @@ void draw_tic_tac_toe_task() {
 
     // 抓取画笔
     double pen_z = board_center_cartesian(2);
-    grasp_pen(board_center_cartesian, pen_z);
+    grasp_pen(pen_target, pen_z);
+
+    
+
+    ptp_motion_to_cartesian_base(board_center_cartesian);
+    if (!probe_and_press(100, pen_z)) {
+        return; // 如果探测失败，则直接退出任务
+    }
 
     // temp
     double eraser_z = origin_cartesian(2);

@@ -86,7 +86,7 @@ bool probe_and_press(int torque_threshold, double &out_z_height) {
     // ------------------- 5. 额外施加下压力 -------------------
     cout << "\n[动作 4] 施加额外下压 (3mm) 以保证擦拭摩擦力..." << endl;
     
-    VectorXd press_cartesian_target = lining_motion_test(0.0, 0.0, -3.0);
+    VectorXd press_cartesian_target = lining_motion_test(0.0, 0.0, -0.5);
     
     // 输出最终压入后的 Z 高度
     out_z_height = press_cartesian_target(2);

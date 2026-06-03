@@ -448,8 +448,8 @@ void grasp_object(VectorXd target_point_cartesian, double drop_height) {
     set_gripper(false);
     usleep(1000000); // 等待气动夹爪完全抓稳
 
-    // cout << "[抓取流程] 步骤5：垂直上升返回原高度..." << endl;
-    // ptp_motion_to_cartesian_base(target_point_cartesian);
+    cout << "[抓取流程] 步骤5：垂直上升返回原高度..." << endl;
+    lining_motion_test(0.0, 0.0, 50);
 
     cout << "[抓取流程] 抓取动作执行完毕！" << endl;
 }
@@ -457,7 +457,8 @@ void grasp_object(VectorXd target_point_cartesian, double drop_height) {
 void grasp_pen(VectorXd target_point_cartesian, double &out_z_height){
     cout << "\n 移动到马克笔中心上方..." << endl;
     VectorXd top_center = target_point_cartesian;
-    top_center(2) = 370.015; // original: 70
+    top_center(2) = 370.015 + 50.0; // original: 70
+    set_gripper(true);
     ptp_motion_to_cartesian_base(top_center);
 
     cout << "\n[交互] 已移动到物体上方，准备下移并开始抓取" << endl;
@@ -466,16 +467,11 @@ void grasp_pen(VectorXd target_point_cartesian, double &out_z_height){
 
 
     // 抓取物体
-    grasp_object(top_center, 370.015 - 355.016); // original: 75
+    grasp_object(top_center, 370.015 + 50.0 - 355.016); // original: 75
 
     // 等待用户输入确认后再继续
     cout << "\n[交互] 抓取完成。请输入任意字符并按回车键，继续执行智能下探..." << endl;
     cin >> temp_input;
-
-    // 智能下探与按压
-    if (!probe_and_press(100, out_z_height)) {
-        return; // 如果探测失败，则直接退出任务
-    }
 }
 
 void grasp_eraser(VectorXd target_point_cartesian, double &out_z_height){
