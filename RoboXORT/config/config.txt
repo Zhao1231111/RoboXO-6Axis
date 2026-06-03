@@ -5,6 +5,6 @@ board_center_base 527.299 -0.492295 330.026 0.0 0.0 0.0
 target_in_board 0.0 0.0 50.0 3.14159 0.0 0.0
 
 # 力矩检测阈值
-torque_threshold 120
+torque_threshold 100
 
 # 370.015 355.016

@@ -479,7 +479,6 @@ void test_robot_func() {
     // 触发任务状态机
     NeedPowerOn = 1;
     sleep(5);
-    set_gripper(true);
     // multi_joint_move_test(); // 原来的调用方式
     // run_task_state_machine(); // 新的任务状态机调用
     // run_calibration_task();

@@ -74,7 +74,7 @@ static double move_pen_to_xy_without_drawing(double x, double y, double draw_z, 
     
     // 3. 垂直下放画笔进行下探
     double z;
-    probe_and_press(150, z);
+    probe_and_press(50, z);
     
     return z; // 返回真实探测到的高度
 }
