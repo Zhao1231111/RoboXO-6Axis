@@ -16,7 +16,7 @@ using namespace std;
 namespace {
 
 struct VisionGuidedTaskConfig {
-    string target = "eraser";
+    string target = "pen";
     bool use_object_angle = true;
     Vector3d grasp_rpy_board = Vector3d(3.14159, 0.0, 0.0);
     double pick_lift_mm = 300.0;
@@ -78,6 +78,7 @@ void run_vision_object_task() {
 
     cout << "[视觉任务] 开始前回零..." << endl;
     move_home_position();
+    set_gripper(true);
 
     VisionDetectionResult result;
     string error;
@@ -115,7 +116,7 @@ void run_vision_object_task() {
     ptp_motion_to_cartesian_base(above_object_base);
 
     cout << "[视觉任务] MoveLine 向下 30cm..." << endl;
-    lining_motion_test(0.0, 0.0, -task_config.pick_lift_mm);
+    lining_motion_test(0.0, 0.0, -task_config.pick_lift_mm - 13);
 
     cout << "[视觉任务] 关闭夹爪..." << endl;
     set_gripper(false);

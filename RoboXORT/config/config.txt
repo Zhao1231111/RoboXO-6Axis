@@ -8,10 +8,10 @@ target_in_board 0.0 0.0 50.0 3.14159 0.0 0.0
 torque_threshold 120
 
 # 视觉识别服务：视觉电脑 IP 和端口
-vision_server 10.192.25.175 50051
+vision_server 192.168.20.2 50051
 vision_timeout_ms 60000
 whiteboard_size_mm 655.0 460.0
 vision_target eraser
 vision_use_object_angle 1
 vision_grasp_rpy_board 3.14159 0.0 0.0
-vision_pick_lift_mm 300.0
+vision_pick_lift_mm 100.0

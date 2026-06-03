@@ -399,7 +399,7 @@ void ptp_motion_to_cartesian_base(VectorXd target_cartesian_base) {
     VectorXd vel_current_joint = VectorXd::Zero(6);
     VectorXd acc_current_joint = VectorXd::Zero(6);
     double Ts = 0.001;
-    double velPerc = 30, accPerc = 20, decPerc = 20, jerkPerc = 10;
+    double velPerc = 25, accPerc = 20, decPerc = 20, jerkPerc = 10;
     
     std::deque<double> trajectory;
     g_general_6s->move_joint_interp(target_joint, current_joint, vel_current_joint, acc_current_joint, 
