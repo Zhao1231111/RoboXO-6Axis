@@ -11,12 +11,11 @@ double single_joint_test[6] = {0,0,0,0,0,0};
 void wait_trajectory_completion() {
     while (PowerStatus && !g_general_6s->get_angle_deque().empty() && 
            !g_abort_trajectory.load(std::memory_order_relaxed) && 
-           !g_estop.load(std::memory_order_relaxed) && 
-           !touch_detected) {
+           !g_estop.load(std::memory_order_relaxed)) {
         usleep(10000); 
     }
 
-    if (g_abort_trajectory.load(std::memory_order_relaxed) || g_estop.load(std::memory_order_relaxed) || touch_detected) {
+    if (g_abort_trajectory.load(std::memory_order_relaxed) || g_estop.load(std::memory_order_relaxed)) {
         usleep(5000); // wait for RT to enter hold_position
         g_general_6s->get_angle_deque().clear();
         g_abort_trajectory.store(false, std::memory_order_release);

@@ -67,8 +67,12 @@ bool probe_and_press(int torque_threshold, double &out_z_height) {
     // 阻塞式下探（内部遇到碰撞会立即清空轨迹并退出）
     downward_probe_motion(-100, origin_point_joint, origin_cartesian);
     
+    // 立即保存并重置全局标志，防止泄露到下一个动作
+    bool touched = touch_detected;
+    touch_detected = false;
+
     // 判断下探动作结束的原因
-    if (touch_detected) {
+    if (touched) {
         cout << "[任务状态] 成功接触白板！机器人已安全停止下探。" << endl;
         cout << "   - [力矩详情] 阈值设定: " << TORQUE_THRESHOLD << endl;
         cout << "   - [力矩详情] 基准力矩 J2: " << baseline_tor[1] << " | J3: " << baseline_tor[2] << endl;
