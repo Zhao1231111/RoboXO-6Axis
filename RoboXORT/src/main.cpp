@@ -1,421 +1,474 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/resource.h>
-#include <sys/time.h>
-#include <sys/types.h>
+#include <signal.h>
+#include <sched.h>
 #include <time.h>
-#include <sys/mman.h>
-#include <malloc.h>
-#include <sched.h> /* sched_setscheduler() */
 #include <thread>
-#include <deque> 
+#include <deque>
+#include <cmath>
+#include <cstdlib>
 #include <Eigen/Eigen>
 #include "general_6s.h"
-#include "ecrt.h"
-#include "probe_detect_tasks.h" // 引入任务声明
-#include "calibration_task.h" 
+#include "ethercat_config.h"
+#include "robot_params.h"
+#include "ipc_protocol.h"
+#include "ipc_server.h"
+#include "teleop_keyboard.h"
 #include "chessboard_tasks.h"
 
 using namespace Eigen;
 using namespace std;
 
-// --- 夹爪长度 ---
-int L = 160; // 单位：毫米
+// ============================================================================
+// Global Shared State (IPC <-> RT)
+// ============================================================================
 
-// --- 接触检测相关的全局变量定义 ---
-bool is_touch_probing = false;       // 标志位：是否正在进行下探检测
-bool touch_detected = false;         // 标志位：是否已检测到接触
-signed int baseline_tor[6] = {0};    // 基准力矩
-int TORQUE_THRESHOLD = 50;           // 力矩突变阈值 (需根据实际调整)
-int trigger_tor_1 = 0;               // 记录触发时实际力矩
+ipc::SharedRobotState                g_shared_state;
+ipc::JogCommandPacked                g_jog_cmd;
+std::atomic<bool>                    g_estop{false};
+ipc::SPSCQueue<ipc::IOCommand, 16>  g_io_queue;
+
+// ============================================================================
+// Legacy globals required by motion_control.h / probe_detect_tasks.h / etc.
+// ============================================================================
+
+bool PowerStatus = false;
+bool NeedPowerOn = false;
+bool NeedPowerOff = false;
+
+std::deque<double> angle_deque_out;
+std::deque<int>    tor_deque_out;
+std::deque<double> trajectory;
+
+bool is_touch_probing = false;
+bool touch_detected = false;
+signed int baseline_tor[6] = {0};
+int TORQUE_THRESHOLD = 50;
+int trigger_tor_1 = 0;
 int trigger_tor_2 = 0;
 
-
-// 外部引用的机械臂控制算法对象
-extern General_6S* g_general_6s;
-
-// --- 应用参数定义 ---
-#define FREQUENCY 1000 // EtherCAT 循环频率 1000Hz (周期 1ms)
-#define CLOCK_TO_USE CLOCK_MONOTONIC
-
-// EtherCAT 字典对象
-#define TARGET_POSITION 0 
-#define CYCLIC_POSITION 8 // CSP (周期同步位置) 模式的控制字值
-
-#define NSEC_PER_SEC (1000000000L)
-#define PERIOD_NS (NSEC_PER_SEC / FREQUENCY) // 1ms = 1000000 ns
-#define TIMESPEC2NS(T) ((uint64_t) (T).tv_sec * NSEC_PER_SEC + (T).tv_nsec)
-
-// --- EtherCAT 状态与配置变量 ---
-static ec_master_t* master = NULL;
-static ec_master_state_t master_state = {};
-static ec_domain_t* domain1 = NULL;
-static ec_domain_state_t domain1_state = {};
-static ec_slave_config_t* sc[7] = {};
-static ec_slave_config_state_t sc_state[7] = {};
-
-int flag[7] = { 0 }; // 伺服准备好标志
-int flag2 = 0;       // 上电状态机流转标志
-
-// 过程数据指针
-static uint8_t* domain1_pd = NULL;
-
-// 六个松下伺服驱动器的总线别名和位置
-#define PANASONIC_0 0,0
-#define PANASONIC_1 0,1
-#define PANASONIC_2 0,2
-#define PANASONIC_3 0,3
-#define PANASONIC_4 0,4
-#define PANASONIC_5 0,5
-#define IO_ban 0,6
-#define num_ 7
-
-uint16_t a[7] = { 0 };
-uint16_t p[7] = { 0,1,2,3,4,5,6 };
-#define VID_PID 0x00000922,0x00000a01 // 松下伺服厂商ID和产品代码
-#define VID_PID2 0x00000c6d,0x00000001 // IO板厂商ID和产品代码
-
-// 运行状态标志
-bool PowerStatus = 0; // 伺服上电状态
-bool NeedPowerOn = 0; // 请求上电标志
-bool NeedPowerOff = 0; // 请求下电标志
-
-// --- 夹爪控制变量 ---
 int gripper_io_data = 0;
 bool gripper_action_req = false;
 
-std::deque<double> angle_deque_out;
-std::deque<int> tor_deque_out;
-std::deque<double> trajectory; // 队列存储整个路径中对应六个关节角度的插值
+// ============================================================================
+// Jog Motion Generator State (local to RT thread)
+// ============================================================================
 
-// PDO 映射偏移量记录结构体
-static struct {
-    unsigned int ctrl_word[6];
-    unsigned int operation_mode[6];
-    unsigned int target_position[6];
-    unsigned int touch_probe_function[6];
-    unsigned int status_word[6];
-    unsigned int position_actual_value[6];
-    unsigned int touch_probe_status[6];
-    unsigned int touch_probe_pos1_pos_value[6];
-    unsigned int digital_inputs[6];
-    unsigned int torque_actual_value[6];
-    unsigned int BC[6];
-    unsigned int F[6];
-    unsigned int io_out;
-    unsigned int io_in;
-} offset;
+struct JogState {
+    bool     active = false;
+    uint8_t  mode = 0;
+    uint8_t  axis = 0;
+    int8_t   direction = 0;
+    double   target_velocity = 0.0;
+    double   current_velocity = 0.0;
+    int      expire_counter = 0;
 
-// Domain1 注册的 PDO 对象表 (CiA 402)
-const static ec_pdo_entry_reg_t domain1_regs[] = {
-    // 轴 1 (PANASONIC_0)
-    {PANASONIC_0, VID_PID, 0x6040, 0, &offset.ctrl_word[0]},
-    {PANASONIC_0, VID_PID, 0x607A, 0, &offset.target_position[0]},
-    {PANASONIC_0, VID_PID, 0x60B8, 0, &offset.touch_probe_function[0]},
-    {PANASONIC_0, VID_PID, 0x6060, 0, &offset.operation_mode[0]},
-    {PANASONIC_0, VID_PID, 0x6041, 0, &offset.status_word[0]},
-    {PANASONIC_0, VID_PID, 0x6064, 0, &offset.position_actual_value[0]},
-    {PANASONIC_0, VID_PID, 0x60B9, 0, &offset.touch_probe_status[0]},
-    {PANASONIC_0, VID_PID, 0x60BA, 0, &offset.touch_probe_pos1_pos_value[0]},
-    {PANASONIC_0, VID_PID, 0x60BC, 0, &offset.BC[0]},
-    {PANASONIC_0, VID_PID, 0x603F, 0, &offset.F[0]},
-    {PANASONIC_0, VID_PID, 0x60FD, 0, &offset.digital_inputs[0]},
-    {PANASONIC_0, VID_PID, 0x6077, 0, &offset.torque_actual_value[0]},
-    // 轴 2
-    {PANASONIC_1, VID_PID, 0x6040, 0, &offset.ctrl_word[1]},
-    {PANASONIC_1, VID_PID, 0x607A, 0, &offset.target_position[1]},
-    {PANASONIC_1, VID_PID, 0x60B8, 0, &offset.touch_probe_function[1]},
-    {PANASONIC_1, VID_PID, 0x6060, 0, &offset.operation_mode[1]},
-    {PANASONIC_1, VID_PID, 0x6041, 0, &offset.status_word[1]},
-    {PANASONIC_1, VID_PID, 0x6064, 0, &offset.position_actual_value[1]},
-    {PANASONIC_1, VID_PID, 0x60B9, 0, &offset.touch_probe_status[1]},
-    {PANASONIC_1, VID_PID, 0x60BA, 0, &offset.touch_probe_pos1_pos_value[1]},
-    {PANASONIC_1, VID_PID, 0x60BC, 0, &offset.BC[1]},
-    {PANASONIC_1, VID_PID, 0x603F, 0, &offset.F[1]},
-    {PANASONIC_1, VID_PID, 0x60FD, 0, &offset.digital_inputs[1]},
-    {PANASONIC_1, VID_PID, 0x6077, 0, &offset.torque_actual_value[1]},
-    // 轴 3
-    {PANASONIC_2, VID_PID, 0x6040, 0, &offset.ctrl_word[2]},
-    {PANASONIC_2, VID_PID, 0x607A, 0, &offset.target_position[2]},
-    {PANASONIC_2, VID_PID, 0x60B8, 0, &offset.touch_probe_function[2]},
-    {PANASONIC_2, VID_PID, 0x6060, 0, &offset.operation_mode[2]},
-    {PANASONIC_2, VID_PID, 0x6041, 0, &offset.status_word[2]},
-    {PANASONIC_2, VID_PID, 0x6064, 0, &offset.position_actual_value[2]},
-    {PANASONIC_2, VID_PID, 0x60B9, 0, &offset.touch_probe_status[2]},
-    {PANASONIC_2, VID_PID, 0x60BA, 0, &offset.touch_probe_pos1_pos_value[2]},
-    {PANASONIC_2, VID_PID, 0x60BC, 0, &offset.BC[2]},
-    {PANASONIC_2, VID_PID, 0x603F, 0, &offset.F[2]},
-    {PANASONIC_2, VID_PID, 0x60FD, 0, &offset.digital_inputs[2]},
-    {PANASONIC_2, VID_PID, 0x6077, 0, &offset.torque_actual_value[2]},
-    // 轴 4
-    {PANASONIC_3, VID_PID, 0x6040, 0, &offset.ctrl_word[3]},
-    {PANASONIC_3, VID_PID, 0x607A, 0, &offset.target_position[3]},
-    {PANASONIC_3, VID_PID, 0x60B8, 0, &offset.touch_probe_function[3]},
-    {PANASONIC_3, VID_PID, 0x6060, 0, &offset.operation_mode[3]},
-    {PANASONIC_3, VID_PID, 0x6041, 0, &offset.status_word[3]},
-    {PANASONIC_3, VID_PID, 0x6064, 0, &offset.position_actual_value[3]},
-    {PANASONIC_3, VID_PID, 0x60B9, 0, &offset.touch_probe_status[3]},
-    {PANASONIC_3, VID_PID, 0x60BA, 0, &offset.touch_probe_pos1_pos_value[3]},
-    {PANASONIC_3, VID_PID, 0x60BC, 0, &offset.BC[3]},
-    {PANASONIC_3, VID_PID, 0x603F, 0, &offset.F[3]},
-    {PANASONIC_3, VID_PID, 0x60FD, 0, &offset.digital_inputs[3]},
-    {PANASONIC_3, VID_PID, 0x6077, 0, &offset.torque_actual_value[3]},
-    // 轴 5
-    {PANASONIC_4, VID_PID, 0x6040, 0, &offset.ctrl_word[4]},
-    {PANASONIC_4, VID_PID, 0x607A, 0, &offset.target_position[4]},
-    {PANASONIC_4, VID_PID, 0x60B8, 0, &offset.touch_probe_function[4]},
-    {PANASONIC_4, VID_PID, 0x6060, 0, &offset.operation_mode[4]},
-    {PANASONIC_4, VID_PID, 0x6041, 0, &offset.status_word[4]},
-    {PANASONIC_4, VID_PID, 0x6064, 0, &offset.position_actual_value[4]},
-    {PANASONIC_4, VID_PID, 0x60B9, 0, &offset.touch_probe_status[4]},
-    {PANASONIC_4, VID_PID, 0x60BA, 0, &offset.touch_probe_pos1_pos_value[4]},
-    {PANASONIC_4, VID_PID, 0x60BC, 0, &offset.BC[4]},
-    {PANASONIC_4, VID_PID, 0x603F, 0, &offset.F[4]},
-    {PANASONIC_4, VID_PID, 0x60FD, 0, &offset.digital_inputs[4]},
-    {PANASONIC_4, VID_PID, 0x6077, 0, &offset.torque_actual_value[4]},
-    // 轴 6
-    {PANASONIC_5, VID_PID, 0x6040, 0, &offset.ctrl_word[5]},
-    {PANASONIC_5, VID_PID, 0x607A, 0, &offset.target_position[5]},
-    {PANASONIC_5, VID_PID, 0x60B8, 0, &offset.touch_probe_function[5]},
-    {PANASONIC_5, VID_PID, 0x6060, 0, &offset.operation_mode[5]},
-    {PANASONIC_5, VID_PID, 0x6041, 0, &offset.status_word[5]},
-    {PANASONIC_5, VID_PID, 0x6064, 0, &offset.position_actual_value[5]},
-    {PANASONIC_5, VID_PID, 0x60B9, 0, &offset.touch_probe_status[5]},
-    {PANASONIC_5, VID_PID, 0x60BA, 0, &offset.touch_probe_pos1_pos_value[5]},
-    {PANASONIC_5, VID_PID, 0x60BC, 0, &offset.BC[5]},
-    {PANASONIC_5, VID_PID, 0x603F, 0, &offset.F[5]},
-    {PANASONIC_5, VID_PID, 0x60FD, 0, &offset.digital_inputs[5]},
-    {PANASONIC_5, VID_PID, 0x6077, 0, &offset.torque_actual_value[5]},
-    {IO_ban, VID_PID2, 0x7000, 0, &offset.io_out},
-    {IO_ban, VID_PID2, 0x6000, 0, &offset.io_in},
-    {}
+    double   jog_target_deg[6] = {};
+    double   jog_target_cart[6] = {};
+    bool     cart_initialized = false;
+
+    double   joint_accel_limit[6] = {};
+    double   cart_accel_linear = 0.0;
+    double   cart_accel_angular = 0.0;
+
+    double   joint_limit_lower[6] = {-170, -120, -70, -170, -120, -360};
+    double   joint_limit_upper[6] = { 170,  120, 210,  170,  120,  360};
+
+    void reset() {
+        active = false;
+        current_velocity = 0.0;
+        expire_counter = 0;
+    }
 };
 
-// --- PDO 配置 ---
-static ec_pdo_entry_info_t device_pdo_entries[] = {
-    {0x6040, 0x00, 16}, {0x607a, 0x00, 32}, {0x60b8, 0x00, 16}, {0x6060, 0x00, 8}, // RxPDO
-    {0x6041, 0x00, 16}, {0x6064, 0x00, 32}, {0x60b9, 0x00, 16}, {0x60ba, 0x00, 32}, // TxPDO
-    {0x60bc, 0x00, 32}, {0x603f, 0x00, 16}, {0x60fd, 0x00, 32}, {0x6077, 0x00, 16}
-};
+static constexpr double JOG_MAX_JOINT_SPEED_DPS = 10.0;
+static constexpr double JOG_MAX_CART_LINEAR_MPS = 10.0;
+static constexpr double JOG_MAX_CART_ANGULAR_DPS = 5.0;
+static constexpr double JOG_ACCEL_TIME_S = 0.2;
+static constexpr double JOG_JOINT_ACCEL = JOG_MAX_JOINT_SPEED_DPS / JOG_ACCEL_TIME_S;
+static constexpr double JOG_CART_LINEAR_ACCEL = JOG_MAX_CART_LINEAR_MPS / JOG_ACCEL_TIME_S;
+static constexpr double JOG_CART_ANGULAR_ACCEL = JOG_MAX_CART_ANGULAR_DPS / JOG_ACCEL_TIME_S;
 
-static ec_pdo_info_t device_pdos[] = {
-    {0x1600, 4, device_pdo_entries + 0}, // RxPdo: 接收主站数据 (目标位置、控制字等)
-    {0x1A00, 8, device_pdo_entries + 4}  // TxPdo: 发送状态给主站 (当前位置、状态字、力矩等)
-};
+// ============================================================================
+// Helper: timespec addition
+// ============================================================================
 
-static ec_sync_info_t device_syncs[] = {
-    { 0, EC_DIR_OUTPUT, 0, NULL, EC_WD_DISABLE },
-    { 1, EC_DIR_INPUT, 0, NULL, EC_WD_DISABLE },
-    { 2, EC_DIR_OUTPUT, 1, device_pdos + 0, EC_WD_ENABLE },
-    { 3, EC_DIR_INPUT, 1, device_pdos + 1, EC_WD_DISABLE },
-    { 0xFF }
-};
-
-// --- IO板 PDO 配置 ---
-static ec_pdo_entry_info_t device2_pdo_entries[] = {
-    {0x7000, 0x00, 16},
-    {0x6000, 0x00, 16},
-};
-
-static ec_pdo_info_t device2_pdos[] = {
-    {0x1600, 1, device2_pdo_entries + 0 },
-    {0x1A00, 1, device2_pdo_entries + 1 }
-};
-
-static ec_sync_info_t device2_syncs[] = {
-    { 0, EC_DIR_OUTPUT, 0, NULL, EC_WD_DISABLE },
-    { 1, EC_DIR_INPUT, 0, NULL, EC_WD_DISABLE },
-    { 2, EC_DIR_OUTPUT, 1, device2_pdos + 0, EC_WD_ENABLE },
-    { 3, EC_DIR_INPUT, 1, device2_pdos + 1, EC_WD_DISABLE },
-    { 0xFF }
-};
-
-static unsigned int counter = 0;
-static unsigned int blink = 0;
-static unsigned int sync_ref_counter = 0;
-const struct timespec cycletime = { 0, PERIOD_NS };
-
-// --- 辅助函数 ---
-
-// 累加时间
-struct timespec timespec_add(struct timespec time1, struct timespec time2) {
+static struct timespec timespec_add(struct timespec t1, struct timespec t2) {
     struct timespec result;
-    if ((time1.tv_nsec + time2.tv_nsec) >= NSEC_PER_SEC) {
-        result.tv_sec = time1.tv_sec + time2.tv_sec + 1;
-        result.tv_nsec = time1.tv_nsec + time2.tv_nsec - NSEC_PER_SEC;
-    } else {
-        result.tv_sec = time1.tv_sec + time2.tv_sec;
-        result.tv_nsec = time1.tv_nsec + time2.tv_nsec;
+    result.tv_nsec = t1.tv_nsec + t2.tv_nsec;
+    result.tv_sec  = t1.tv_sec + t2.tv_sec;
+    if (result.tv_nsec >= EC_NSEC_PER_SEC) {
+        result.tv_sec++;
+        result.tv_nsec -= EC_NSEC_PER_SEC;
     }
     return result;
 }
 
-// 打印当前关节位置
-void print_current_pos(Encoder_Param encoder_param) {
-    double pos_cur_ang[6]; 
-    double pos_cur_ang_inc[6]; 
-    double pos_cur_ang_inc_zero_angle[6]; 
-    for (int i = 0; i < 6; i++) {
-        pos_cur_ang[i] = g_general_6s->getActPositionAngle(i); // 获取当前位置角度值
-        pos_cur_ang_inc[i] = (pos_cur_ang[i] * encoder_param.direction[i] * encoder_param.reducRatio[i] + encoder_param.singleTurnEncoder[i] + encoder_param.deviation[i]) * (1 << encoder_param.encoderResolution[i]) / 360.0;
-        pos_cur_ang_inc_zero_angle[i] = pos_cur_ang_inc[i] * 360 / (1 << encoder_param.encoderResolution[i])- encoder_param.singleTurnEncoder[i];    
-    }
-    printf("current_pos (角度): %lf %lf %lf %lf %lf %lf \n", pos_cur_ang[0], pos_cur_ang[1], pos_cur_ang[2], pos_cur_ang[3], pos_cur_ang[4], pos_cur_ang[5]);
-    printf("absolute_pos_inc (增量): %lf %lf %lf %lf %lf %lf \n", pos_cur_ang_inc[0], pos_cur_ang_inc[1], pos_cur_ang_inc[2], pos_cur_ang_inc[3], pos_cur_ang_inc[4], pos_cur_ang_inc[5]);
-}
+// ============================================================================
+// Real-Time Cyclic Task
+// ============================================================================
 
-// 检查数据域状态
-void check_domain1_state(void) {
-    ec_domain_state_t ds;
-    ecrt_domain_state(domain1, &ds);
-    if (ds.working_counter != domain1_state.working_counter)
-        printf("Domain1: WC %u.\n", ds.working_counter);
-    if (ds.wc_state != domain1_state.wc_state)
-        printf("Domain1: State %u.\n", ds.wc_state);
-    domain1_state = ds;
-}
+static void cyclic_task() {
+    struct timespec wakeupTime;
+    clock_gettime(EC_CLOCK_TO_USE, &wakeupTime);
 
-// 检查主站状态
-void check_master_state(void) {
-    ec_master_state_t ms;
-    ecrt_master_state(master, &ms);
-    if (ms.slaves_responding != master_state.slaves_responding)
-        printf("%u slave(s).\n", ms.slaves_responding);
-    if (ms.al_states != master_state.al_states)
-        printf("AL states: 0x%02X.\n", ms.al_states);
-    if (ms.link_up != master_state.link_up)
-        printf("Link is %s.\n", ms.link_up ? "up" : "down");
-    master_state = ms;
-}
+    unsigned int status_check_counter = 0;
+    unsigned int sync_ref_counter = 0;
 
-// 检查从站状态
-void check_slave_config_states(ec_slave_config_t* sc, int i) {
-    ec_slave_config_state_t s;
-    ecrt_slave_config_state(sc, &s);
-    if (s.operational == 1) flag[i] = 1;
-    sc_state[i] = s;
-}
+    JogState jog;
+    for (int i = 0; i < 6; i++) jog.joint_accel_limit[i] = JOG_JOINT_ACCEL;
+    jog.cart_accel_linear = JOG_CART_LINEAR_ACCEL;
+    jog.cart_accel_angular = JOG_CART_ANGULAR_ACCEL;
 
-// --- 实时循环任务 ---
-void cyclic_task() {
-    struct timespec wakeupTime, time;
-    clock_gettime(CLOCK_TO_USE, &wakeupTime);
+    signed int hold_position[6] = {};
+    bool position_initialized = false;
+
+    extern General_6S* g_general_6s;
 
     while (1) {
-        // 定时唤醒 (周期 1ms)
-        wakeupTime = timespec_add(wakeupTime, cycletime);
-        clock_nanosleep(CLOCK_TO_USE, TIMER_ABSTIME, &wakeupTime, NULL);
+        wakeupTime = timespec_add(wakeupTime, ec_cycletime);
+        clock_nanosleep(EC_CLOCK_TO_USE, TIMER_ABSTIME, &wakeupTime, NULL);
 
-        // 设置主站应用时间
-        ecrt_master_application_time(master, TIMESPEC2NS(wakeupTime));
+        if (!g_sim_mode) {
+            ecrt_master_application_time(ec_master, EC_TIMESPEC2NS(wakeupTime));
+            ecrt_master_receive(ec_master);
+            ecrt_domain_process(ec_domain);
+            ec_check_domain_state();
+        }
 
-        // 接收 EtherCAT 过程数据
-        ecrt_master_receive(master);
-        ecrt_domain_process(domain1);
-
-        check_domain1_state();
-
-        // 1. 读取各关节实际位置并保存
+        // --- Read actual positions and torques ---
         signed int actualInc[6];
-        for (unsigned int i = 0; i < 6; i++) {
-            actualInc[i] = EC_READ_S32(domain1_pd + offset.position_actual_value[i]);   
+        signed int actualTor[6];
+        for (int i = 0; i < 6; i++) {
+            actualInc[i] = EC_READ_S32(ec_domain_pd + ec_offsets.position_actual_value[i]);
+            actualTor[i] = EC_READ_S16(ec_domain_pd + ec_offsets.torque_actual_value[i]);
         }
-        g_general_6s->set_act_inc(actualInc); // 将读取到的编码器数值写入运动学对象
-        
-        signed int actualtor[6];
+        g_general_6s->set_act_inc(actualInc);
 
-        // 1Hz 频率检查状态并执行上电状态机
-        if (counter) {
-            counter--;
-        } else {
-            counter = FREQUENCY * 2;
-            check_master_state();
-            
-            for (int i = 0; i < num_; i++) {
-                check_slave_config_states(sc[i], i);
-            }
+        uint16_t io_in_val = EC_READ_U16(ec_domain_pd + ec_offsets.io_in);
 
-            // --- 伺服上电状态机 ---
-            // 控制字流程： 0x0080(复位) -> 0x0006(关闭使能) -> 0x0007(准备使能) -> 0x000F(开启使能)
-            if (!PowerStatus && NeedPowerOn) {
-                // 等待所有驱动器进入 operational 状态
-                if (flag[0] == 1 && flag[1] == 1 && flag[2] == 1 && flag[3] == 1 && flag[4] == 1 && flag[5] == 1 && flag2 == 0) {
-                    for (int i = 0; i < 6; i++) EC_WRITE_U16(domain1_pd + offset.ctrl_word[i], 0x0080);
-                    flag2 = 2;
-                } else if (flag2 == 2) {
-                    for (int i = 0; i < 6; i++) EC_WRITE_U16(domain1_pd + offset.ctrl_word[i], 0x0006);
-                    flag2 = 3;
-                } else if (flag2 == 3) {
-                    for (int i = 0; i < 6; i++) {
-                        EC_WRITE_U16(domain1_pd + offset.ctrl_word[i], 0x0007);
-                        EC_WRITE_S8(domain1_pd + offset.operation_mode[i], CYCLIC_POSITION); // 设置为 CSP 模式
-                        EC_WRITE_S32(domain1_pd + offset.target_position[i], actualInc[i]);  // 保持当前位置
-                    }
-                    flag2 = 4;
-                } else if (flag2 == 4) {
-                    for (int i = 0; i < 6; i++) {
-                        EC_WRITE_U16(domain1_pd + offset.ctrl_word[i], 0x000f);
-                        EC_WRITE_S32(domain1_pd + offset.target_position[i], actualInc[i]);
-                    }
-                    flag2 = 5;
-                    printf("伺服上电成功!\n");
-                    PowerStatus = 1; // 上电完成标志
-                    NeedPowerOn = 0;
+        if (!position_initialized && PowerStatus) {
+            for (int i = 0; i < 6; i++) hold_position[i] = actualInc[i];
+            position_initialized = true;
+        }
+
+        // === EStop Check (highest priority) ===
+        if (g_estop.load(std::memory_order_relaxed)) {
+            if (PowerStatus) {
+                for (int i = 0; i < 6; i++) {
+                    hold_position[i] = actualInc[i];
+                    EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], actualInc[i]);
                 }
             }
-            blink = !blink;
+            jog.reset();
+            g_general_6s->get_angle_deque().clear();
+
+            double joints[6], tcp[6];
+            for (int i = 0; i < 6; i++) joints[i] = g_general_6s->getActPositionAngle(i);
+            VectorXd jv(6);
+            for (int i = 0; i < 6; i++) jv(i) = joints[i];
+            MatrixXd T;
+            g_general_6s->calc_forward_kin(jv, T);
+            VectorXd c = g_general_6s->tr_2_MCS(T);
+            for (int i = 0; i < 6; i++) tcp[i] = c(i);
+            for (int i = 3; i < 6; i++) tcp[i] = rad2deg(tcp[i]);
+            uint32_t io = (uint32_t(io_in_val) << 16) | uint32_t(EC_READ_U16(ec_domain_pd + ec_offsets.io_out));
+            g_shared_state.write(joints, tcp, io, ipc::SAFETY_ESTOP);
+
+            goto cycle_end;
         }
 
-        // 2. 轨迹下发与数据记录
-        // 如果伺服已上电并且轨迹队列不为空，向驱动器下发目标位置
-        if (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
-            for (int i = 0; i < 6; i++) {
-                // 写入目标位置
-                EC_WRITE_S32(domain1_pd + offset.target_position[i], g_general_6s->set_target_pos_to_servo(i));
-                // 读取实时力矩并记录
-                actualtor[i] = EC_READ_S16(domain1_pd + offset.torque_actual_value[i]); 
-                tor_deque_out.push_back(actualtor[i]);
-                angle_deque_out.push_back(g_general_6s->getActPositionAngle(i));
-            }
-            
-            // --- 接触检测逻辑 ---
-            if (is_touch_probing && !touch_detected) {
-                // 判断 J2(i=1) 或 J3(i=2) 是否受力突变
-                if (abs(actualtor[1] - baseline_tor[1]) > 1.5 * TORQUE_THRESHOLD || 
-                    abs(actualtor[2] - baseline_tor[2]) > TORQUE_THRESHOLD) {
-                    trigger_tor_1 = actualtor[1];
-                    trigger_tor_2 = actualtor[2];
-                    touch_detected = true;
-                    // 在 EtherCAT 线程内部清空队列，保证线程安全，防止 double free！
-                    g_general_6s->get_angle_deque().clear();
+        // === Servo Power State Machine ===
+        if (!g_sim_mode) {
+            if (status_check_counter > 0) {
+                status_check_counter--;
+            } else {
+                status_check_counter = EC_FREQUENCY * 2;
+                ec_check_master_state();
+                for (int i = 0; i < NUM_SLAVES; i++) ec_check_slave_state(i);
+
+                if (!PowerStatus && NeedPowerOn) {
+                    bool all_op = true;
+                    for (int i = 0; i < NUM_SERVO_AXES; i++) {
+                        if (!ec_slave_op_flag[i]) { all_op = false; break; }
+                    }
+
+                    if (all_op && ec_power_state_machine == 0) {
+                        for (int i = 0; i < 6; i++)
+                            EC_WRITE_U16(ec_domain_pd + ec_offsets.ctrl_word[i], 0x0080);
+                        ec_power_state_machine = 2;
+                    } else if (ec_power_state_machine == 2) {
+                        for (int i = 0; i < 6; i++)
+                            EC_WRITE_U16(ec_domain_pd + ec_offsets.ctrl_word[i], 0x0006);
+                        ec_power_state_machine = 3;
+                    } else if (ec_power_state_machine == 3) {
+                        for (int i = 0; i < 6; i++) {
+                            EC_WRITE_U16(ec_domain_pd + ec_offsets.ctrl_word[i], 0x0007);
+                            EC_WRITE_S8(ec_domain_pd + ec_offsets.operation_mode[i], CYCLIC_POSITION);
+                            EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], actualInc[i]);
+                        }
+                        ec_power_state_machine = 4;
+                    } else if (ec_power_state_machine == 4) {
+                        for (int i = 0; i < 6; i++) {
+                            EC_WRITE_U16(ec_domain_pd + ec_offsets.ctrl_word[i], 0x000f);
+                            EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], actualInc[i]);
+                        }
+                        ec_power_state_machine = 5;
+                        PowerStatus = true;
+                        NeedPowerOn = false;
+                        position_initialized = true;
+                        for (int i = 0; i < 6; i++) hold_position[i] = actualInc[i];
+                        for (int i = 0; i < 6; i++)
+                            jog.jog_target_deg[i] = g_general_6s->getActPositionAngle(i);
+                        jog.cart_initialized = false;
+                        printf("伺服上电成功.\n");
+                    }
                 }
             }
         }
-        
-        // 写入夹爪IO数据
+
+        // === Motion Generation ===
+        if (PowerStatus) {
+            auto cmd = g_jog_cmd.load();
+
+            if (cmd.active) {
+                if (!jog.active) {
+                    jog.active = true;
+                    jog.current_velocity = 0.0;
+                    for (int i = 0; i < 6; i++)
+                        jog.jog_target_deg[i] = g_general_6s->getActPositionAngle(i);
+                    jog.cart_initialized = false;
+                }
+                jog.mode = cmd.mode;
+                jog.axis = cmd.axis;
+                jog.direction = cmd.direction;
+                jog.expire_counter = cmd.expires_ms;
+
+                if (cmd.mode == 0) {
+                    jog.target_velocity = jog.direction * JOG_MAX_JOINT_SPEED_DPS * cmd.speed_ratio / 100.0;
+                } else {
+                    double max_spd = (cmd.axis < 3) ? JOG_MAX_CART_LINEAR_MPS : JOG_MAX_CART_ANGULAR_DPS;
+                    jog.target_velocity = jog.direction * max_spd * cmd.speed_ratio / 100.0;
+                }
+            }
+
+            if (jog.active) {
+                jog.expire_counter--;
+                if (jog.expire_counter <= 0) {
+                    jog.target_velocity = 0.0;
+                    g_jog_cmd.clear();
+                }
+
+                double accel = (jog.mode == 0) ? jog.joint_accel_limit[jog.axis]
+                             : (jog.axis < 3) ? jog.cart_accel_linear : jog.cart_accel_angular;
+                double dt = 0.001;
+                double vel_diff = jog.target_velocity - jog.current_velocity;
+                double max_delta = accel * dt;
+                if (fabs(vel_diff) <= max_delta)
+                    jog.current_velocity = jog.target_velocity;
+                else
+                    jog.current_velocity += (vel_diff > 0 ? max_delta : -max_delta);
+
+                if (jog.target_velocity == 0.0 && fabs(jog.current_velocity) < 0.001) {
+                    jog.current_velocity = 0.0;
+                    jog.active = false;
+                }
+
+                if (jog.mode == 0) {
+                    // Joint space jog
+                    jog.jog_target_deg[jog.axis] += jog.current_velocity * dt;
+                    if (jog.jog_target_deg[jog.axis] < jog.joint_limit_lower[jog.axis]) {
+                        jog.jog_target_deg[jog.axis] = jog.joint_limit_lower[jog.axis];
+                        jog.current_velocity = 0.0; jog.target_velocity = 0.0;
+                    }
+                    if (jog.jog_target_deg[jog.axis] > jog.joint_limit_upper[jog.axis]) {
+                        jog.jog_target_deg[jog.axis] = jog.joint_limit_upper[jog.axis];
+                        jog.current_velocity = 0.0; jog.target_velocity = 0.0;
+                    }
+                    for (int i = 0; i < 6; i++) {
+                        signed int inc;
+                        g_general_6s->angleToInc(jog.jog_target_deg[i], inc, i);
+                        hold_position[i] = inc;
+                        EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], inc);
+                    }
+                } else {
+                    // Cartesian space jog
+                    if (!jog.cart_initialized) {
+                        VectorXd cj(6);
+                        for (int i = 0; i < 6; i++) cj(i) = jog.jog_target_deg[i];
+                        MatrixXd T;
+                        g_general_6s->calc_forward_kin(cj, T);
+                        VectorXd cp = g_general_6s->tr_2_MCS(T);
+                        for (int i = 0; i < 6; i++) jog.jog_target_cart[i] = cp(i);
+                        jog.cart_initialized = true;
+                    }
+
+                    double increment = jog.current_velocity * dt;
+                    double cart_increment = (jog.axis >= 3) ? deg2rad(increment) : increment;
+                    jog.jog_target_cart[jog.axis] += cart_increment;
+
+                    VectorXd ct(6);
+                    for (int i = 0; i < 6; i++) ct(i) = jog.jog_target_cart[i];
+                    MatrixXd Tt = g_general_6s->rpy_2_tr(ct);
+                    VectorXd seed(6);
+                    for (int i = 0; i < 6; i++) seed(i) = jog.jog_target_deg[i];
+                    VectorXd nj(6);
+                    g_general_6s->calc_inverse_kin(Tt, seed, nj);
+
+                    bool ik_ok = true;
+                    for (int i = 0; i < 6; i++) {
+                        if (std::isnan(nj(i)) || std::isinf(nj(i)) ||
+                            fabs(nj(i) - jog.jog_target_deg[i]) > 1.0 ||
+                            nj(i) < jog.joint_limit_lower[i] ||
+                            nj(i) > jog.joint_limit_upper[i]) {
+                            ik_ok = false; break;
+                        }
+                    }
+
+                    if (ik_ok) {
+                        for (int i = 0; i < 6; i++) jog.jog_target_deg[i] = nj(i);
+                        for (int i = 0; i < 6; i++) {
+                            signed int inc;
+                            g_general_6s->angleToInc(jog.jog_target_deg[i], inc, i);
+                            hold_position[i] = inc;
+                            EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], inc);
+                        }
+                    } else {
+                        jog.jog_target_cart[jog.axis] -= cart_increment;
+                        jog.current_velocity = 0.0;
+                        jog.target_velocity = 0.0;
+                        for (int i = 0; i < 6; i++)
+                            EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], hold_position[i]);
+                    }
+                }
+            } else if (!g_general_6s->get_angle_deque().empty()) {
+                // Angle Deque 轨迹处理
+                
+                for (int i = 0; i < 6; i++) {
+                    signed int target_inc = g_general_6s->set_target_pos_to_servo(i);
+                    hold_position[i] = target_inc;
+                    // 写入目标位置
+                    EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], target_inc);
+                    // 读取实时力矩并记录
+                    actualTor[i] = EC_READ_S16(ec_domain_pd + ec_offsets.torque_actual_value[i]);
+                    tor_deque_out.push_back(actualTor[i]);
+                    angle_deque_out.push_back(g_general_6s->getActPositionAngle(i));
+                }
+
+                // --- 接触检测逻辑 ---
+                if (is_touch_probing && !touch_detected) {
+                    // 判断 J2(i=1) 或 J3(i=2) 是否受力突变
+                    if (abs(actualTor[1] - baseline_tor[1]) > 1.5 * TORQUE_THRESHOLD ||
+                        abs(actualTor[2] - baseline_tor[2]) > TORQUE_THRESHOLD) {
+                        trigger_tor_1 = actualTor[1];
+                        trigger_tor_2 = actualTor[2];
+                        touch_detected = true;
+                        // 在 EtherCAT 线程内部清空队列，保证线程安全，防止 double free！
+                        g_general_6s->get_angle_deque().clear();
+                    }
+                }
+            } else {
+                // Hold position
+                for (int i = 0; i < 6; i++)
+                    EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], hold_position[i]);
+            }
+        }
+
+        // === IO Command Processing ===
         if (gripper_action_req) {
-            EC_WRITE_S32(domain1_pd + offset.io_out, gripper_io_data);
+            EC_WRITE_U16(ec_domain_pd + ec_offsets.io_out, static_cast<uint16_t>(gripper_io_data));
             gripper_action_req = false;
-        }
-        
-        // 3. 时钟同步
-        if (sync_ref_counter) {
-            sync_ref_counter--;
         } else {
-            sync_ref_counter = 1; 
-            clock_gettime(CLOCK_TO_USE, &time);
-            ecrt_master_sync_reference_clock(master);
+            ipc::IOCommand io_cmd;
+            bool io_dirty = false;
+            uint16_t current_io_out = EC_READ_U16(ec_domain_pd + ec_offsets.io_out);
+            while (g_io_queue.try_pop(io_cmd)) {
+                if (io_cmd.pin > 15) continue;
+                if (io_cmd.value)
+                    current_io_out |= (1u << io_cmd.pin);
+                else
+                    current_io_out &= ~(1u << io_cmd.pin);
+                io_dirty = true;
+            }
+            if (io_dirty)
+                EC_WRITE_U16(ec_domain_pd + ec_offsets.io_out, current_io_out);
         }
-        ecrt_master_sync_slave_clocks(master);
 
-        // 4. 发送过程数据
-        ecrt_domain_queue(domain1);
-        ecrt_master_send(master);
+        // === CSP Velocity Clamp ===
+        {
+            static signed int prev_target[6] = {};
+            static bool clamp_initialized = false;
+            if (PowerStatus && !clamp_initialized) {
+                for (int i = 0; i < 6; i++)
+                    prev_target[i] = EC_READ_S32(ec_domain_pd + ec_offsets.target_position[i]);
+                clamp_initialized = true;
+            }
+            if (clamp_initialized) {
+                for (int i = 0; i < 6; i++) {
+                    signed int desired = EC_READ_S32(ec_domain_pd + ec_offsets.target_position[i]);
+                    signed int delta = desired - prev_target[i];
+                    if (abs(delta) > csp_max_inc_per_cycle[i]) {
+                        desired = prev_target[i] + (delta > 0 ? csp_max_inc_per_cycle[i] : -csp_max_inc_per_cycle[i]);
+                        EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], desired);
+                        hold_position[i] = desired;
+                        printf("[WARN] CSP clamp axis %d: delta=%d > limit=%d\n", i, delta, csp_max_inc_per_cycle[i]);
+                    }
+                    prev_target[i] = desired;
+                }
+            }
+        }
+
+        // === Update Shared State ===
+        {
+            double joints[6], tcp[6];
+            for (int i = 0; i < 6; i++) joints[i] = g_general_6s->getActPositionAngle(i);
+            VectorXd jv(6);
+            for (int i = 0; i < 6; i++) jv(i) = joints[i];
+            MatrixXd T;
+            g_general_6s->calc_forward_kin(jv, T);
+            VectorXd c = g_general_6s->tr_2_MCS(T);
+            for (int i = 0; i < 6; i++) tcp[i] = c(i);
+            for (int i = 3; i < 6; i++) tcp[i] = rad2deg(tcp[i]);
+
+            uint32_t io = (uint32_t(io_in_val) << 16) | uint32_t(EC_READ_U16(ec_domain_pd + ec_offsets.io_out));
+            uint8_t safety = (jog.active || !g_general_6s->get_angle_deque().empty())
+                           ? ipc::SAFETY_MOVING : ipc::SAFETY_BRAKED;
+            g_shared_state.write(joints, tcp, io, safety);
+        }
+
+    cycle_end:
+        if (g_sim_mode) {
+            for (int i = 0; i < 6; i++) {
+                signed int t = EC_READ_S32(ec_domain_pd + ec_offsets.target_position[i]);
+                EC_WRITE_S32(ec_domain_pd + ec_offsets.position_actual_value[i], t);
+            }
+            static int sim_print_ctr = 0;
+            // if (++sim_print_ctr >= 100) {
+            //     sim_print_ctr = 0;
+            //     double ja[6];
+            //     for (int i = 0; i < 6; i++) ja[i] = g_general_6s->getActPositionAngle(i);
+            //     printf("[SIM] Joints: [%7.2f, %7.2f, %7.2f, %7.2f, %7.2f, %7.2f]\n",
+            //            ja[0], ja[1], ja[2], ja[3], ja[4], ja[5]);
+            // }
+        } else {
+            if (sync_ref_counter > 0) {
+                sync_ref_counter--;
+            } else {
+                sync_ref_counter = 1;
+                ecrt_master_sync_reference_clock(ec_master);
+            }
+            ecrt_master_sync_slave_clocks(ec_master);
+            ecrt_domain_queue(ec_domain);
+            ecrt_master_send(ec_master);
+        }
     }
 }
 
 
+// ============================================================================
+// 功能测试
+// ============================================================================
 // --- 初始化与功能测试 ---
 void test_robot_func() {
     // 1. 设置机器人的 DH 参数 (Denavit-Hartenberg，用于运动学正逆解)
@@ -456,6 +509,8 @@ void test_robot_func() {
         motor_pa.RatedVel[i] = motor_pa.RatedVel_rpm[i] * 6 / motor_pa.encoder.reducRatio[i];
         motor_pa.DeRatedVel[i] = -motor_pa.RatedVel[i];
     }
+
+    extern General_6S* g_general_6s;
     
     // 初始化算法层对象
     g_general_6s->set_param(motor_pa.encoder, motor_pa, dh_example, decare);
@@ -473,7 +528,7 @@ void test_robot_func() {
     }
     printf("\n");
     
-    print_current_pos(motor_pa.encoder);
+    // print_current_pos(motor_pa.encoder);
     
     
     // 触发任务状态机
@@ -485,104 +540,150 @@ void test_robot_func() {
     // draw_tic_tac_toe_task();
 }
 
-// --- 启动 EtherCAT 主站 ---
-int StartEC() {
-    // 锁住内存，防止因为缺页中断导致的实时性下降
-    if (mlockall(MCL_CURRENT | MCL_FUTURE) == -1) {
-        perror("mlockall failed");
-        return -1;
-    }
+// ============================================================================
+// Usage
+// ============================================================================
 
-    master = ecrt_request_master(0);
-    if (!master) return -1;
-
-    domain1 = ecrt_master_create_domain(master);
-    if (!domain1) return -1;
-
-    // 配置从站
-    for (int i = 0; i < num_; i++) {
-        if (i < 6) {
-            if (!(sc[i] = ecrt_master_slave_config(master, a[i], p[i], VID_PID))) {
-                fprintf(stderr, "获取伺服从站 %d 配置失败.\n", i);
-                return -1;
-            }
-            if (ecrt_slave_config_pdos(sc[i], EC_END, device_syncs)) {
-                fprintf(stderr, "配置伺服从站 %d PDO 失败.\n", i);
-                return -1;
-            }
-        } else {
-            if (!(sc[i] = ecrt_master_slave_config(master, a[i], p[i], VID_PID2))) {
-                fprintf(stderr, "获取IO从站 %d 配置失败.\n", i);
-                return -1;
-            }
-            if (ecrt_slave_config_pdos(sc[i], EC_END, device2_syncs)) {
-                fprintf(stderr, "配置IO从站 %d PDO 失败.\n", i);
-                return -1;
-            }
-        }
-    }
-    printf("成功配置从站 PDO!\n");
-
-    // 注册 Domain
-    if (ecrt_domain_reg_pdo_entry_list(domain1, domain1_regs)) {
-        fprintf(stderr, "PDO 条目注册失败!\n");
-        exit(EXIT_FAILURE);
-    }
-
-    // 配置分布式时钟 (DC)
-    for (int i = 0; i < 6; i++) {
-        ecrt_slave_config_dc(sc[i], 0x0300, PERIOD_NS, PERIOD_NS / 2, 0, 0);
-    }
-
-    printf("激活 EtherCAT 主站...\n");
-    if (ecrt_master_activate(master)) return -1;
-
-    if (!(domain1_pd = ecrt_domain_data(domain1))) return -1;
-
-    // 设置线程优先级为最高，采用 FIFO 实时调度
-    struct sched_param param = {};
-    param.sched_priority = sched_get_priority_max(SCHED_FIFO);
-    printf("使用的线程优先级为 %i.\n", param.sched_priority);
-    if (sched_setscheduler(0, SCHED_FIFO, &param) == -1) {
-        perror("sched_setscheduler 配置失败");
-    }
-
-    printf("开始执行 EtherCAT 实时循环任务.\n");
-    cyclic_task();
-    return 0;
+static void print_usage(const char* prog) {
+    printf("Usage: %s [OPTIONS]\n", prog);
+    printf("Options:\n");
+    printf("  --sim       Run in simulation mode (no EtherCAT hardware required)\n");
+    printf("  --ipc       Start the IPC server (If none, does test_robot_func)\n");
+    printf("  --teleop    Start keyboard teleop interface instead of IPC\n");
+    printf("  --help      Show this help message\n");
 }
 
-// --- 控制器入口 ---
-int start_controller() {
-    // 实例化机械臂算法对象
-    g_general_6s = new General_6S();
-    printf("算法对象初始化成功: %p\n", g_general_6s);
-    
-    // 启动 EtherCAT 通信线程
-    std::thread a(StartEC);
-    a.detach();
-    
-    // 动态等待主站激活及从站进入 OP 状态
-    int wait_time = 0;
-    printf("等待从站进入 OP 状态...\n");
-    while (!(flag[0] == 1 && flag[1] == 1 && flag[2] == 1 && flag[3] == 1 && flag[4] == 1 && flag[5] == 1)) {
-        sleep(1);
-        wait_time++;
-        if (wait_time >= 30) {
-            printf("警告: 等待从站进入 OP 状态超时 (30秒)!\n");
-            break;
-        }
-    }
-    if (wait_time < 30) {
-        printf("所有从站已就绪，耗时 %d 秒。\n", wait_time);
-    }
-    // 运行机器人测试流程
-    test_robot_func();
-    return 0;
-}
+// ============================================================================
+// Entry Point
+// ============================================================================
 
 int main(int argc, char* argv[]) {
-    // 启动控制
-    start_controller();
+    bool enable_ipc = false;
+    bool enable_teleop = false;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--sim") == 0) {
+            g_sim_mode = true;
+        } else if (strcmp(argv[i], "--ipc") == 0) {
+            enable_ipc = true;
+        } else if (strcmp(argv[i], "--teleop") == 0) {
+            enable_teleop = true;
+            enable_ipc = false;  // teleop replaces IPC
+        } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            print_usage(argv[0]);
+            return 0;
+        } else {
+            fprintf(stderr, "Unknown option: %s\n", argv[i]);
+            print_usage(argv[0]);
+            return 1;
+        }
+    }
+
+    printf("=== RoboXORT Controller ===\n");
+
+    // 1. Initialize robot algorithm object
+    extern General_6S* g_general_6s;
+    g_general_6s = new General_6S();
+    printf("算法对象初始化成功.\n");
+
+    init_robot_params();
+    compute_csp_limits();
+    printf("机器人参数配置完成.\n");
+
+    // 2. Initialize EtherCAT (or simulation)
+    if (g_sim_mode) {
+        if (ec_init_sim() != 0) {
+            fprintf(stderr, "仿真模式初始化失败!\n");
+            return 1;
+        }
+        for (int i = 0; i < 6; i++) {
+            signed int inc;
+            g_general_6s->angleToInc(0.0, inc, i);
+            EC_WRITE_S32(ec_domain_pd + ec_offsets.position_actual_value[i], inc);
+            EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], inc);
+        }
+        PowerStatus = true;
+        printf("[SIM] 现在是仿真模式.\n");
+    } else {
+        if (ec_init() != 0) {
+            fprintf(stderr, "EtherCAT 初始化失败!\n");
+            return 1;
+        }
+    }
+
+    // 3. Start RT cyclic task in a dedicated thread
+    std::thread rt_thread([]() {
+        struct sched_param param = {};
+        param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+        printf("RT 线程优先级: %d\n", param.sched_priority);
+        if (sched_setscheduler(0, SCHED_FIFO, &param) == -1) {
+            perror("sched_setscheduler failed");
+        }
+        cyclic_task();
+    });
+
+    // 4. Wait for slaves to reach OP state (skip in sim mode)
+    if (!g_sim_mode) {
+        printf("等待从站进入 OP 状态...\n");
+        for (int wait = 0; wait < 30; wait++) {
+            bool all_op = true;
+            for (int i = 0; i < NUM_SERVO_AXES; i++) {
+                if (!ec_slave_op_flag[i]) { all_op = false; break; }
+            }
+            if (all_op) {
+                printf("所有从站已就绪，耗时 %d 秒.\n", wait);
+                break;
+            }
+            sleep(1);
+            if (wait == 29) printf("警告: 等待从站 OP 超时 (30秒)!\n");
+        }
+
+        // 5. Request servo power on
+        NeedPowerOn = true;
+        printf("请求伺服上电...\n");
+        for (int wait = 0; wait < 10; wait++) {
+            if (PowerStatus) { printf("伺服上电完成.\n"); break; }
+            sleep(1);
+        }
+    }
+
+    // 6. Start interface (IPC server or teleop)
+    ipc::IPCServer ipc_server;
+    std::thread ipc_thread;
+
+    if (enable_ipc) {
+        ipc_thread = std::thread([&ipc_server]() { ipc_server.run(); });
+        printf("IPC 服务已启动，等待连接...\n");
+    } else if (enable_teleop) {
+        printf("进入键盘遥操作模式...\n");
+        run_teleop();
+        // After teleop exits, trigger graceful shutdown
+        g_estop.store(true, std::memory_order_release);
+        printf("遥操作结束.\n");
+        rt_thread.detach();
+        return 0;
+    } else {
+        printf("系统就绪 (IPC 服务未启动).\n");
+        test_robot_func();
+    }
+
+    // 7. Main thread: wait for signal
+    sigset_t waitset;
+    sigemptyset(&waitset);
+    sigaddset(&waitset, SIGINT);
+    sigaddset(&waitset, SIGTERM);
+    sigprocmask(SIG_BLOCK, &waitset, NULL);
+
+    int sig;
+    sigwait(&waitset, &sig);
+    printf("\n收到信号 %d，正在关闭...\n", sig);
+
+    g_estop.store(true, std::memory_order_release);
+    if (enable_ipc) {
+        ipc_server.stop();
+        if (ipc_thread.joinable()) ipc_thread.join();
+    }
+    rt_thread.detach();
+    sleep(1);
     return 0;
 }

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(RoboXORT CXX)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Source
@@ -34,6 +34,5 @@ foreach(CONFIG_FILE IN LISTS CONFIG_FILES)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CONFIG_FILE}"
         "${CMAKE_CURRENT_BINARY_DIR}/${FILE_NAME}"
-        COMMENT "Copying ${FILE_NAME} to build directory..."
     )
 endforeach()
