@@ -341,6 +341,8 @@ async def game_start(request: Request, payload: StartGameRequest) -> JSONRespons
     session = _get_session(request)
     session.set_running(payload.difficulty, payload.first_player)
     _to_alarm(request, GameState.GRABBING_PEN, "game start -> grasp pen")
+    # TaskID = 1 (GraspPen)
+    request.app.state.app.ipc_client.send_task_command(1, 0, 0)
     return JSONResponse({"status": "success", "message": "Game session created and alarm scheduled for grabbing pen", "session": _sync_session_snapshot(session)})
 
 @router.post("/drop_pen")
@@ -378,6 +380,8 @@ async def vision_board_state(request: Request, state: VisionBoardState) -> dict:
     session.first_player = state.first_player
     session.vision_ready = True
 
+    print(f"[Vision Debug] 收到视觉请求: player_moved={state.player_moved}, 当前网关状态={session.state.value}")
+
     if session.state == GameState.IDLE:
         _transition_to(request, GameState.WAITING_HUMAN, "idle -> waiting human")
 
@@ -387,19 +391,26 @@ async def vision_board_state(request: Request, state: VisionBoardState) -> dict:
             _transition_to(request, GameState.GAME_OVER, "board already terminal")
         else:
             _transition_to(request, GameState.THINKING, "human move accepted, AI thinking")
+            print(f"[Vision Debug] 开始 AI 决策, 当前棋盘: {session.board}, 难度: {session.difficulty}")
             move, reason = _choose_robot_move(session.board, session.difficulty)
+            print(f"[Vision Debug] AI 决策完成: 落子位置={move}, 原因={reason}")
             if move == -1:
+                print("[Vision Debug] AI 找不到合法步，进入 ERROR 状态")
                 _transition_to(request, GameState.ERROR, reason)
             else:
                 session.pending_move = move
                 session.pending_reason = reason
                 session.turn = "robot"
+                print(f"[Vision Debug] 即将下发 IPC 指令给 C++: send_task_command(2, {move}, 0)")
                 _to_alarm(request, GameState.ROBOT_EXECUTING, f"pre-motion alarm before robot move={move}")
                 request.app.state.app.ipc_client.send_task_command(2, move, 0)
                 session.waiting_robot_action = True
                 _transition_to(request, GameState.CHECK_END, "robot command sent")
     elif state.player_moved:
+        print(f"[Vision Debug] 被拦截: 状态机处于 {session.state.value}，不在允许接收下棋的状态 ({GameState.WAITING_HUMAN.value} 或 {GameState.RECOGNIZING.value})")
         _transition_to(request, GameState.ERROR, f"unexpected player_moved in state={session.state.value}")
+    else:
+        print(f"[Vision Debug] 视觉端提示 player_moved=False，本次不触发机器人下棋动作")
 
     print(f"[Vision] state={session.state.value}, board={session.board}")
     return {"status": "success", "message": "Game session updated.", "session": _sync_session_snapshot(session), "winner": _winner(session.board), "draw": _is_draw(session.board)}
