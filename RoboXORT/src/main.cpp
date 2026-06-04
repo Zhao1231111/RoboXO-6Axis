@@ -30,6 +30,7 @@ ipc::JogCommandPacked                g_jog_cmd;
 std::atomic<bool>                    g_estop{false};
 ipc::SPSCQueue<ipc::IOCommand, 16>  g_io_queue;
 ipc::SPSCQueue<ipc::TaskCommandPayload, 16> g_task_queue;
+std::atomic<bool>                    g_abort_trajectory{false};
 
 // ============================================================================
 // Legacy globals required by motion_control.h / probe_detect_tasks.h / etc.
@@ -164,7 +165,7 @@ static void cyclic_task() {
                 }
             }
             jog.reset();
-            g_general_6s->get_angle_deque().clear();
+            g_abort_trajectory.store(true, std::memory_order_release);
 
             double joints[6], tcp[6];
             for (int i = 0; i < 6; i++) joints[i] = g_general_6s->getActPositionAngle(i);
@@ -344,7 +345,7 @@ static void cyclic_task() {
                             EC_WRITE_S32(ec_domain_pd + ec_offsets.target_position[i], hold_position[i]);
                     }
                 }
-            } else if (!g_general_6s->get_angle_deque().empty()) {
+            } else if (!g_general_6s->get_angle_deque().empty() && !g_abort_trajectory.load(std::memory_order_relaxed)) {
                 // Angle Deque 轨迹处理
                 
                 for (int i = 0; i < 6; i++) {
@@ -366,8 +367,8 @@ static void cyclic_task() {
                         trigger_tor_1 = actualTor[1];
                         trigger_tor_2 = actualTor[2];
                         touch_detected = true;
-                        // 在 EtherCAT 线程内部清空队列，保证线程安全，防止 double free！
-                        g_general_6s->get_angle_deque().clear();
+                        // 在 EtherCAT 线程内部设置中止标志，通知非实时线程安全清空队列
+                        g_abort_trajectory.store(true, std::memory_order_release);
                     }
                 }
             } else {

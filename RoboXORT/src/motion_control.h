@@ -21,6 +21,7 @@ extern std::deque<int> tor_deque_out;
 extern double single_joint_test[6];
 extern bool is_touch_probing;
 extern bool touch_detected;
+extern std::atomic<bool> g_abort_trajectory;
 
 /**
  * @brief 将机器人的各个关节移动到初始（零点）位置，并阻塞等待直至完成

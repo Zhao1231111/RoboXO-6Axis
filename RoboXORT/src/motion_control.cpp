@@ -8,6 +8,21 @@ using namespace std;
 
 double single_joint_test[6] = {0,0,0,0,0,0};
 
+void wait_trajectory_completion() {
+    while (PowerStatus && !g_general_6s->get_angle_deque().empty() && 
+           !g_abort_trajectory.load(std::memory_order_relaxed) && 
+           !g_estop.load(std::memory_order_relaxed) && 
+           !touch_detected) {
+        usleep(10000); 
+    }
+
+    if (g_abort_trajectory.load(std::memory_order_relaxed) || g_estop.load(std::memory_order_relaxed) || touch_detected) {
+        usleep(5000); // wait for RT to enter hold_position
+        g_general_6s->get_angle_deque().clear();
+        g_abort_trajectory.store(false, std::memory_order_release);
+    }
+}
+
 void move_home_position()   
 {
     VectorXd origin_point_joint_test(6);
@@ -54,9 +69,7 @@ void move_home_position()
         usleep(50000);
     }
     // 2. 上电完成后，等待轨迹被完全消耗完毕
-    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
-        usleep(50000); 
-    }
+    wait_trajectory_completion();
 }
 
 void multi_joint_move_test() {
@@ -98,12 +111,17 @@ void multi_joint_move_test() {
     
     // 运动过程状态监控
     double cur_angle_double[6];
-    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
+    while (PowerStatus && !g_general_6s->get_angle_deque().empty() && !g_abort_trajectory.load() && !g_estop.load()) {
         for (int i = 0; i < 6; i++) cur_angle_double[i] = g_general_6s->getActPositionAngle(i);
         printf("运行中，当前角度: %lf %lf %lf %lf %lf %lf \n", cur_angle_double[0], cur_angle_double[1], cur_angle_double[2], cur_angle_double[3], cur_angle_double[4], cur_angle_double[5]);
         
         if (g_general_6s->get_angle_deque().empty() && PowerStatus) NeedPowerOff = 1;
         sleep(1); // 每秒监控一次
+    }
+    if (g_abort_trajectory.load() || g_estop.load()) {
+        usleep(5000);
+        g_general_6s->get_angle_deque().clear();
+        g_abort_trajectory.store(false, std::memory_order_release);
     }
         
     // --- 运动结束后的数据存储 ---
@@ -147,9 +165,7 @@ void multi_joint_move_test() {
         usleep(50000);
     }
     // 2. 上电完成后，等待轨迹被完全消耗完毕
-    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
-        usleep(50000); 
-    }
+    wait_trajectory_completion();
 
 }
 
@@ -207,9 +223,7 @@ VectorXd lining_motion_test(double x, double y, double z)
         usleep(50000);
     }
     // 2. 上电完成后，等待轨迹被完全消耗完毕
-    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
-        usleep(50000); 
-    }
+    wait_trajectory_completion();
 
     
     return target_point_cartesian_coordinate;
@@ -263,9 +277,7 @@ VectorXd circle_motion_test(double mid_x, double mid_y, double mid_z,
     while (!PowerStatus) {
         usleep(50000);
     }
-    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
-        usleep(50000);
-    }
+    wait_trajectory_completion();
 
     return target_point_cartesian_coordinate;
 }
@@ -331,13 +343,9 @@ VectorXd downward_probe_motion(double z_offset, VectorXd origin_point_angle_degr
     touch_detected = false;
 
     // 2. 上电完成后，等待轨迹被完全消耗完毕，或直到检测到力矩突变！
-    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
-        if (touch_detected) {
-            std::cout << "\n[底层运动控制] 触发力矩检测！紧急停止当前动作，截断剩余轨迹。" << std::endl;
-            // 紧急停止的清理操作已移交到底层 EtherCAT 线程内部执行，以保证线程安全！
-            break;
-        }
-        usleep(10000); // 10ms 循环检查
+    wait_trajectory_completion();
+    if (touch_detected) {
+        std::cout << "\n[底层运动控制] 触发力矩检测！已截断剩余轨迹。" << std::endl;
     }
     
     // 动作结束（无论是撞到停下还是走完停下），关闭检测标志
@@ -387,9 +395,7 @@ void joint_motion_test(VectorXd joint_angles_degree_offset,VectorXd origin_point
     while (!PowerStatus) {
         usleep(50000);
     }
-    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
-        usleep(50000); 
-    }
+    wait_trajectory_completion();
 
     return ;
 }
@@ -420,9 +426,7 @@ void ptp_motion_to_cartesian_base(VectorXd target_cartesian_base) {
     while (!PowerStatus) {
         usleep(50000);
     }
-    while (PowerStatus && !g_general_6s->get_angle_deque().empty()) {
-        usleep(50000); 
-    }
+    wait_trajectory_completion();
 }
 
 extern int gripper_io_data;
