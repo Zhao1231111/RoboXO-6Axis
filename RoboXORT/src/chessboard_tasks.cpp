@@ -332,6 +332,8 @@ static VectorXd g_eraser_target(6);
 static double g_pen_z = 0.0;
 static double g_eraser_z = 0.0;
 
+bool debug = true;
+
 void task_executor_loop() {
     cout << "[Task Executor] 任务执行线程已启动..." << endl;
     
@@ -355,6 +357,10 @@ void task_executor_loop() {
             
             switch (cmd.task_id) {
                 case TASK_GRASP_PEN:
+                    if(debug){
+                        cout << "[Task Executor] 执行抓笔动作!" << endl;
+                        break;
+                    }
                     move_home_position();
                     grasp_pen(g_pen_target, g_pen_z);
                     {
@@ -371,6 +377,10 @@ void task_executor_loop() {
                     break;
 
                 case TASK_DRAW_O:
+                    if(debug){
+                        cout << "[Task Executor] 画O动作! 参数: " << cmd.arg1 << endl;
+                        break;
+                    }
                     if (cmd.arg1 >= 0 && cmd.arg1 <= 8) {
                         draw_o(g_board_center_cartesian, cmd.arg1);
                         move_home_position();
@@ -378,6 +388,10 @@ void task_executor_loop() {
                     break;
                     
                 case TASK_DRAW_X:
+                    if(debug){
+                        cout << "[Task Executor] 画X动作! 参数: " << cmd.arg1 << endl;
+                        break;
+                    }
                     if (cmd.arg1 >= 0 && cmd.arg1 <= 8) {
                         draw_x(g_board_center_cartesian, cmd.arg1);
                         move_home_position();
@@ -385,6 +399,10 @@ void task_executor_loop() {
                     break;
 
                 case TASK_ERASE_BOARD:
+                    if(debug){
+                        cout << "[Task Executor] 擦桌动作!" << endl;
+                        break;
+                    }
                     grasp_eraser(g_eraser_target, g_eraser_z);
                     {
                         VectorXd temp = g_board_center_cartesian;
