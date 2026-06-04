@@ -28,6 +28,9 @@ class GameState(str, Enum):
     GAME_OVER = "GameOver"
     ERROR = "Error"
 
+_NOT_IMPLEMENTED = JSONResponse(
+    status_code=501,
+    content={"error": "not_implemented", "message": "Game logic not yet implemented"},)
 
 @dataclass
 class GameSession:
@@ -340,6 +343,16 @@ async def game_start(request: Request, payload: StartGameRequest) -> JSONRespons
     _to_alarm(request, GameState.GRABBING_PEN, "game start -> grasp pen")
     return JSONResponse({"status": "success", "message": "Game session created and alarm scheduled for grabbing pen", "session": _sync_session_snapshot(session)})
 
+@router.post("/drop_pen")
+async def game_drop_pen(request: Request) -> JSONResponse:
+    # TaskID = 5 (DropPen)
+    request.app.state.app.ipc_client.send_task_command(5, 0, 0)
+    return JSONResponse({"status": "success", "message": "Drop pen command sent"})
+
+
+@router.get("/state")
+def game_state() -> JSONResponse:
+    return _NOT_IMPLEMENTED
 
 @router.post("/reset")
 async def game_reset(request: Request) -> JSONResponse:
