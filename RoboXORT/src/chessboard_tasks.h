@@ -17,6 +17,17 @@ extern General_6S* g_general_6s;
 #define BOARD_MARK_RATIO           0.32    // X/O 占单格半宽比例，建议 0.25~0.40
 #define BOARD_O_SEGMENTS           72      // O 的折线段数，越大越圆
 
+// 高级任务 ID 定义
+enum TaskID {
+    TASK_GRASP_PEN    = 1,
+    TASK_DRAW_O       = 2,
+    TASK_ERASE_BOARD  = 3,
+    TASK_DRAW_X       = 4
+};
+
+// 任务执行线程主循环
+void task_executor_loop();
+
 // 主入口函数
 void draw_tic_tac_toe_task();
 

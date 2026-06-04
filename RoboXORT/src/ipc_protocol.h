@@ -32,6 +32,7 @@ enum class MsgType : uint8_t {
     StatusQuery   = 0x06,
     EStop         = 0x07,
     EStopReset    = 0x08,
+    TaskCommand   = 0x10,
     StatusReport  = 0x81,
     Ack           = 0x82,
     Error         = 0x83,
@@ -72,6 +73,13 @@ struct IOSetPayload {
     uint8_t _pad[2];
 };
 static_assert(sizeof(IOSetPayload) == 4, "IOSetPayload must be 4 bytes");
+
+struct TaskCommandPayload {
+    uint8_t  task_id;
+    int32_t  arg1;
+    int32_t  arg2;
+};
+static_assert(sizeof(TaskCommandPayload) == 9, "TaskCommandPayload must be 9 bytes");
 
 struct StatusReportPayload {
     double   joints_deg[6];   // 48 bytes

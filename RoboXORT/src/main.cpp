@@ -16,6 +16,7 @@
 #include "ipc_server.h"
 #include "teleop_keyboard.h"
 #include "chessboard_tasks.h"
+#include "calibration_task.h"
 
 using namespace Eigen;
 using namespace std;
@@ -28,6 +29,7 @@ ipc::SharedRobotState                g_shared_state;
 ipc::JogCommandPacked                g_jog_cmd;
 std::atomic<bool>                    g_estop{false};
 ipc::SPSCQueue<ipc::IOCommand, 16>  g_io_queue;
+ipc::SPSCQueue<ipc::TaskCommandPayload, 16> g_task_queue;
 
 // ============================================================================
 // Legacy globals required by motion_control.h / probe_detect_tasks.h / etc.
@@ -650,8 +652,10 @@ int main(int argc, char* argv[]) {
     // 6. Start interface (IPC server or teleop)
     ipc::IPCServer ipc_server;
     std::thread ipc_thread;
+    std::thread task_thread;
 
     if (enable_ipc) {
+        task_thread = std::thread([]() { task_executor_loop(); });
         ipc_thread = std::thread([&ipc_server]() { ipc_server.run(); });
         printf("IPC 服务已启动，等待连接...\n");
     } else if (enable_teleop) {
@@ -682,6 +686,7 @@ int main(int argc, char* argv[]) {
     if (enable_ipc) {
         ipc_server.stop();
         if (ipc_thread.joinable()) ipc_thread.join();
+        if (task_thread.joinable()) task_thread.join();
     }
     rt_thread.detach();
     sleep(1);

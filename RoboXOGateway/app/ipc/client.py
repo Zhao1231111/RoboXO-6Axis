@@ -84,6 +84,13 @@ class IPCClient:
             self._connected = False
             raise RuntimeError("IPC send failed") from e
 
+    def send_task_command(self, task_id: int, arg1: int = 0, arg2: int = 0) -> None:
+        """Send a high-level task command to the RT component."""
+        import struct
+        # pack: uint8 (B), int32 (i), int32 (i) -> total 9 bytes
+        payload = struct.pack("<Bii", task_id, arg1, arg2)
+        self.send_frame(0x10, payload)
+
     # ─── Internal ───────────────────────────────────────────────────────────
 
     def _try_connect(self) -> bool:

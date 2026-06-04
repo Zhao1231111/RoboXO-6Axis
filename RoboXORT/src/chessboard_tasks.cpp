@@ -1,6 +1,7 @@
 #include "chessboard_tasks.h"
 #include "motion_control.h" // 包含所有的运动控制接口
 #include "probe_detect_tasks.h"
+#include "ipc_server.h"
 #include <cmath>
 
 extern void load_task_config(VectorXd& board_center, VectorXd& target_point, int& torque_thresh);
@@ -321,4 +322,91 @@ void draw_tic_tac_toe_task() {
     move_home_position();
 
     cout << "\n========== 井字棋任务圆满结束 ==========" << endl;
+}
+
+// ======================= 异步任务执行线程 =======================
+// 全局状态变量，用于保存每次动作后的高度信息
+static VectorXd g_board_center_cartesian(6);
+static VectorXd g_pen_target(6);
+static VectorXd g_eraser_target(6);
+static double g_pen_z = 0.0;
+static double g_eraser_z = 0.0;
+
+void task_executor_loop() {
+    cout << "[Task Executor] 任务执行线程已启动..." << endl;
+    
+    // 初始化位置信息
+    g_board_center_cartesian << 527.299, -0.492295, 330.026, 3.14159, 0.0, 0.0;
+    g_pen_target << 527.294, -257.495, 370.013, 3.14159, 0.0, 0.0;
+    g_eraser_target << 527.294, 249.506, 330.013, 3.14159, 0.0, 0.0;
+    g_pen_z = g_board_center_cartesian(2);
+    g_eraser_z = g_board_center_cartesian(2);
+
+    while (!g_estop.load(std::memory_order_relaxed)) {
+        ipc::TaskCommandPayload cmd;
+        if (g_task_queue.try_pop(cmd)) {
+            // 等待伺服上电
+            while (!PowerStatus && !g_estop) {
+                usleep(100000);
+            }
+            if (g_estop) break;
+
+            cout << "\n[Task Executor] 收到任务指令: " << (int)cmd.task_id << " 参数: " << cmd.arg1 << endl;
+            
+            switch (cmd.task_id) {
+                case TASK_GRASP_PEN:
+                    move_home_position();
+                    grasp_pen(g_pen_target, g_pen_z);
+                    {
+                        VectorXd temp = g_board_center_cartesian;
+                        temp(2) += 50;
+                        ptp_motion_to_cartesian_base(temp);
+                        lining_motion_test(0.0, 0.0, -50.0);
+                        if (probe_and_press(100, g_pen_z)) {
+                            g_board_center_cartesian(2) = g_pen_z;
+                            draw_chessboard(g_board_center_cartesian);
+                        }
+                    }
+                    move_home_position();
+                    break;
+
+                case TASK_DRAW_O:
+                    if (cmd.arg1 >= 0 && cmd.arg1 <= 8) {
+                        draw_o(g_board_center_cartesian, cmd.arg1);
+                        move_home_position();
+                    }
+                    break;
+                    
+                case TASK_DRAW_X:
+                    if (cmd.arg1 >= 0 && cmd.arg1 <= 8) {
+                        draw_x(g_board_center_cartesian, cmd.arg1);
+                        move_home_position();
+                    }
+                    break;
+
+                case TASK_ERASE_BOARD:
+                    grasp_eraser(g_eraser_target, g_eraser_z);
+                    {
+                        VectorXd temp = g_board_center_cartesian;
+                        temp(2) += 50;
+                        ptp_motion_to_cartesian_base(temp);
+                        lining_motion_test(0.0, 0.0, -50.0);
+                        if (probe_and_press(100, g_eraser_z)) {
+                            g_board_center_cartesian(2) = g_eraser_z;
+                            erase_chessboard(g_board_center_cartesian);
+                        }
+                    }
+                    move_home_position();
+                    break;
+
+                default:
+                    cout << "[Task Executor] 未知任务 ID: " << (int)cmd.task_id << endl;
+                    break;
+            }
+            cout << "[Task Executor] 任务执行完毕" << endl;
+        } else {
+            usleep(10000); // 10ms polling
+        }
+    }
+    cout << "[Task Executor] 退出" << endl;
 }

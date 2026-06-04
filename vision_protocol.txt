@@ -1,0 +1,48 @@
+# RoboXOGateway 与 视觉PC 通信协议
+
+## 1. 协议概述
+视觉 PC（客户端）与 Python 网关（服务端，FastAPI）通过 HTTP POST 请求进行通信。
+当视觉侧检测到棋盘状态发生变化（或者周期性轮询）时，将当前最新的棋盘状态发送给 Python 网关，网关接手后进行决策，并在底层通过 IPC 向 C++ 下发运动指令。
+
+## 2. 接口定义
+
+- **URL:** `http://<网关IP>:<端口>/api/game/vision/board_state`
+- **Method:** `POST`
+- **Content-Type:** `application/json`
+
+### 2.1 请求体 (Request Payload)
+
+视觉端发送 JSON 格式的数据：
+
+```json
+{
+    "board": [1, 0, 0, 2, 1, 0, 0, 0, 2],
+    "player_moved": true,
+    "timestamp": 1690000000.123
+}
+```
+
+**字段说明：**
+- `board` (List[int]): 长度为 9 的一维数组，代表井字棋的 9 个格子（0-8，从左上到右下）。
+  - `0`: 空白
+  - `1`: X (玩家绘制的标记)
+  - `2`: O (机器人绘制的标记)
+- `player_moved` (bool, 可选): 标志位，指示玩家是否刚刚落子。如果为 true，Python 将触发 AI 决策回合。
+- `timestamp` (float, 可选): 视觉端发送状态的时间戳，用于对齐和防抖。
+
+### 2.2 响应体 (Response Payload)
+
+网关收到请求后，同步返回状态，由于决策和机器人运动是异步/耗时的，所以这里只返回接收成功的确认。
+
+```json
+{
+    "status": "success",
+    "message": "Board state received, decision pending.",
+    "is_my_turn": true
+}
+```
+
+**字段说明：**
+- `status`: "success" 或 "error"
+- `message`: 提示信息
+- `is_my_turn`: (可选) 告诉视觉侧目前机器人是否已经接管了控制权（如果在机器人绘制期间，视觉端应该暂停检测以防止画面遮挡干扰）。

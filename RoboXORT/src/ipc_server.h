@@ -10,6 +10,7 @@ extern ipc::SharedRobotState   g_shared_state;
 extern ipc::JogCommandPacked   g_jog_cmd;
 extern std::atomic<bool>       g_estop;
 extern ipc::SPSCQueue<ipc::IOCommand, 16> g_io_queue;
+extern ipc::SPSCQueue<ipc::TaskCommandPayload, 16> g_task_queue;
 
 namespace ipc {
 
@@ -56,6 +57,7 @@ private:
     void dispatch_io_set(const IOSetPayload& payload);
     void dispatch_estop();
     void dispatch_estop_reset();
+    void dispatch_task(const TaskCommandPayload& payload);
 
     int listen_fd_ = -1;
     std::atomic<bool> running_{false};

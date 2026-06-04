@@ -217,6 +217,19 @@ void IPCServer::handle_connection(int client_fd) {
             send_ack(client_fd, hdr.sequence);
             break;
 
+        case MsgType::TaskCommand:
+            if (hdr.payload_length != sizeof(TaskCommandPayload)) {
+                send_error(client_fd, hdr.sequence, 0x0003, "invalid payload size");
+                break;
+            }
+            {
+                TaskCommandPayload payload;
+                memcpy(&payload, buf, sizeof(payload));
+                dispatch_task(payload);
+                send_ack(client_fd, hdr.sequence);
+            }
+            break;
+
         case MsgType::JointMove:
         case MsgType::CartesianMove:
             send_error(client_fd, hdr.sequence, 0x0001, "not implemented");
@@ -338,6 +351,10 @@ void IPCServer::dispatch_estop() {
 
 void IPCServer::dispatch_estop_reset() {
     g_estop.store(false, std::memory_order_release);
+}
+
+void IPCServer::dispatch_task(const TaskCommandPayload& payload) {
+    g_task_queue.try_push(payload);
 }
 
 } // namespace ipc
