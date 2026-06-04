@@ -344,6 +344,8 @@ void task_executor_loop() {
     g_pen_z = g_board_center_cartesian(2);
     g_eraser_z = g_board_center_cartesian(2);
 
+    move_home_position();
+
     while (!g_estop.load(std::memory_order_relaxed)) {
         ipc::TaskCommandPayload cmd;
         if (g_task_queue.try_pop(cmd)) {
@@ -367,8 +369,8 @@ void task_executor_loop() {
                         VectorXd temp = g_board_center_cartesian;
                         temp(2) += 50;
                         ptp_motion_to_cartesian_base(temp);
-                        lining_motion_test(0.0, 0.0, -50.0);
-                        if (probe_and_press(100, g_pen_z)) {
+                        lining_motion_test(0.0, 0.0, -48.0);
+                        if (probe_and_press(80, g_pen_z)) {
                             g_board_center_cartesian(2) = g_pen_z;
                             draw_chessboard(g_board_center_cartesian);
                         }
@@ -425,7 +427,7 @@ void task_executor_loop() {
                     ptp_motion_to_cartesian_base(g_pen_target);
                     lining_motion_test(0, 0, -10);
                     set_gripper(true);
-                    lining_motion_test(0, 0, 20);
+                    lining_motion_test(0, 0, 50);
                     break;
 
                 default:

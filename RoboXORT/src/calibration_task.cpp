@@ -37,8 +37,8 @@ void run_calibration_task() {
 
     
     // 阻塞式移动到起始点
-    ptp_motion_to_cartesian_base(pen_target);
-    set_gripper(true);
+    ptp_motion_to_cartesian_base(target_cartesian_base);
+    set_gripper(false);
     cout << " -> 已到达起始基准点！" << endl;
 
     // ------------------- 2. 交互式微调循环 -------------------
