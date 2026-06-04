@@ -14,7 +14,7 @@ def trigger_real_vision_pc(ip: str, port: int):
         start_time = time.time()
         response = requests.post(url, timeout=5.0)
         
-        if response.status_code == 200:
+        if response.status_code in [200, 202]:
             print(f"[+] 触发成功! (耗时: {time.time() - start_time:.2f}s)")
             print(f"[+] 响应内容: {response.text}")
             print("[*] 视觉 PC 现在应该会在 recognition_delay_sec 后向 Gateway 发送棋盘状态。")
