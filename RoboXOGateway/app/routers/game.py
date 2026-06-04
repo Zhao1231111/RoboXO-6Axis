@@ -49,6 +49,7 @@ class VisionBoardState(BaseModel):
     )
     player_moved: bool = Field(False, description="Whether the player just made a move")
     timestamp: float | None = None
+    safe: bool = Field(True, description="Safety check result")
 
 
 @router.post("/vision/board_state")
