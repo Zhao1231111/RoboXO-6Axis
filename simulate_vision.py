@@ -50,6 +50,16 @@ def test_reset_game():
     except Exception as e:
         print(f"请求失败: {e}")
 
+def test_drop_pen():
+    """测试让机器人放下画笔"""
+    print("\n--- [4] 发送放笔指令 ---")
+    try:
+        response = requests.post(f"{BASE_URL}/drop_pen")
+        print(f"Status Code: {response.status_code}")
+        print(f"Response: {response.json()}")
+    except Exception as e:
+        print(f"请求失败: {e}")
+
 if __name__ == "__main__":
     print("========== 视觉端模拟测试脚本 ==========")
     print("请确保 Python Gateway (FastAPI) 已经在 8000 端口启动。")
@@ -60,9 +70,10 @@ if __name__ == "__main__":
         print("1. 发送 /start (机器人拿笔)")
         print("2. 发送 /vision/board_state (玩家落子，触发 AI 画O)")
         print("3. 发送 /reset (机器人拿橡皮并擦除棋盘)")
+        print("4. 发送 /drop_pen (机器人放笔)")
         print("q. 退出")
         
-        choice = input("请输入 1/2/3/q: ").strip().lower()
+        choice = input("请输入 1/2/3/4/q: ").strip().lower()
         
         if choice == '1':
             test_start_game()
@@ -70,6 +81,8 @@ if __name__ == "__main__":
             test_send_vision_state()
         elif choice == '3':
             test_reset_game()
+        elif choice == '4':
+            test_drop_pen()
         elif choice == 'q':
             print("退出测试。")
             break

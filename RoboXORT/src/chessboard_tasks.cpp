@@ -339,7 +339,7 @@ void task_executor_loop() {
     
     // 初始化位置信息
     g_board_center_cartesian << 527.299, -0.492295, 330.026, 3.14159, 0.0, 0.0;
-    g_pen_target << 527.294, -257.495, 370.013, 3.14159, 0.0, 0.0;
+    g_pen_target << 527.294, -257.495, 370.013, 3.14159, 0.0, 0.0; // 笔上方的临近点
     g_eraser_target << 527.294, 249.506, 330.013, 3.14159, 0.0, 0.0;
     g_pen_z = g_board_center_cartesian(2);
     g_eraser_z = g_board_center_cartesian(2);
@@ -415,6 +415,17 @@ void task_executor_loop() {
                         }
                     }
                     move_home_position();
+                    break;
+                
+                case TASK_DROP_PEN:
+                    if(debug){
+                        cout << "[Task Executor] 放笔动作!" << endl;
+                        break;
+                    }
+                    ptp_motion_to_cartesian_base(g_pen_target);
+                    lining_motion_test(0, 0, -10);
+                    set_gripper(true);
+                    lining_motion_test(0, 0, 20);
                     break;
 
                 default:

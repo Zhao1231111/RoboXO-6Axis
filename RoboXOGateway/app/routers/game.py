@@ -21,6 +21,13 @@ async def game_start(request: Request) -> JSONResponse:
     return JSONResponse({"status": "success", "message": "Grasp pen command sent"})
 
 
+@router.post("/drop_pen")
+async def game_drop_pen(request: Request) -> JSONResponse:
+    # TaskID = 5 (DropPen)
+    request.app.state.app.ipc_client.send_task_command(5, 0, 0)
+    return JSONResponse({"status": "success", "message": "Drop pen command sent"})
+
+
 @router.get("/state")
 def game_state() -> JSONResponse:
     return _NOT_IMPLEMENTED

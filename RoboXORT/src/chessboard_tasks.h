@@ -22,7 +22,8 @@ enum TaskID {
     TASK_GRASP_PEN    = 1,
     TASK_DRAW_O       = 2,
     TASK_ERASE_BOARD  = 3,
-    TASK_DRAW_X       = 4
+    TASK_DRAW_X       = 4,
+    TASK_DROP_PEN = 5
 };
 
 // 任务执行线程主循环
