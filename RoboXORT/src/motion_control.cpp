@@ -29,7 +29,7 @@ void move_home_position()
     velocity_current_joint_test << 0, 0, 0, 0, 0, 0;		  // 设置当前速度
     acceleration_current_joint_test << 0, 0, 0, 0, 0, 0;      // 设置当前加速度
     double Ts_joint_test = 0.001;					          // 设置运动周期
-    double velocityPercent_joint_test = 50;					  // 设置速度百分比
+    double velocityPercent_joint_test = 10;					  // 设置速度百分比
     double accelerationPercent_joint_test = 10;				  // 设置加速度百分比
     double decelerationPercent_joint_test = 10;				  // 设置减速度百分比
     double jacobiPercent_joint_test = 10;					  // 设置雅可比速度百分比 
@@ -367,7 +367,7 @@ void joint_motion_test(VectorXd joint_angles_degree_offset,VectorXd origin_point
     acceleration_current_joint_test << 0, 0, 0, 0, 0, 0;		  // 设置当前加速度
     
     double Ts_joint_test = 0.001;					  // 设置运动周期
-    double velocityPercent_joint_test = 30;					  // 设置速度百分比
+    double velocityPercent_joint_test = 10;					  // 设置速度百分比
     double accelerationPercent_joint_test = 20;					  // 设置加速度百分比
     double decelerationPercent_joint_test = 20;					  // 设置减速度百分比
     double jacobiPercent_joint_test = 10;					  // 设置雅可比速度百分比 
@@ -408,7 +408,7 @@ void ptp_motion_to_cartesian_base(VectorXd target_cartesian_base) {
     VectorXd vel_current_joint = VectorXd::Zero(6);
     VectorXd acc_current_joint = VectorXd::Zero(6);
     double Ts = 0.001;
-    double velPerc = 30, accPerc = 20, decPerc = 20, jerkPerc = 10;
+    double velPerc = 10, accPerc = 20, decPerc = 20, jerkPerc = 10;
     
     std::deque<double> trajectory;
     g_general_6s->move_joint_interp(target_joint, current_joint, vel_current_joint, acc_current_joint, 

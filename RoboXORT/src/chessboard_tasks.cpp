@@ -332,7 +332,7 @@ static VectorXd g_eraser_target(6);
 static double g_pen_z = 0.0;
 static double g_eraser_z = 0.0;
 
-bool debug = true;
+bool debug = false;
 
 void task_executor_loop() {
     cout << "[Task Executor] 任务执行线程已启动..." << endl;
