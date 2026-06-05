@@ -31,7 +31,7 @@ def trigger_real_vision_pc(ip: str, port: int):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="触发视觉 PC 的识别流程测试脚本")
-    parser.add_argument("--ip", type=str, default="10.192.23.74", help="视觉 PC 的 IP 地址 (默认: 10.192.23.74)")
+    parser.add_argument("--ip", type=str, default="192.168.20.5", help="视觉 PC 的 IP 地址 (默认: 10.192.23.74)")
     parser.add_argument("--port", type=int, default=8765, help="视觉 PC 监听的端口 (默认: 8765)")
     
     args = parser.parse_args()
