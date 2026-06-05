@@ -370,7 +370,7 @@ void task_executor_loop() {
                         temp(2) += 50;
                         ptp_motion_to_cartesian_base(temp);
                         lining_motion_test(0.0, 0.0, -48.0);
-                        if (probe_and_press(80, g_pen_z)) {
+                        if (probe_and_press(30, g_pen_z)) {
                             g_board_center_cartesian(2) = g_pen_z;
                             draw_chessboard(g_board_center_cartesian);
                         }
@@ -411,7 +411,7 @@ void task_executor_loop() {
                         temp(2) += 50;
                         ptp_motion_to_cartesian_base(temp);
                         lining_motion_test(0.0, 0.0, -50.0);
-                        if (probe_and_press(100, g_eraser_z)) {
+                        if (probe_and_press(30, g_eraser_z)) {
                             g_board_center_cartesian(2) = g_eraser_z;
                             erase_chessboard(g_board_center_cartesian);
                         }

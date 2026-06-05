@@ -11,6 +11,7 @@ def print_menu():
     print("  3. 机器人完成画图动作 (反馈) -> POST /api/game/robot/action_done")
     print("  4. 放下笔 -> POST /api/game/drop_pen")
     print("  5. 重置游戏 (触发擦黑板) -> POST /api/game/reset")
+    print("  6. 手动下棋 (指定位置画 X 或 O) -> POST /api/game/manual_draw")
     print("  0. 退出本控制台")
     print("="*40)
 
@@ -51,6 +52,17 @@ def main():
             send_post(f"{gateway_url}/api/game/drop_pen")
         elif choice == '5':
             send_post(f"{gateway_url}/api/game/reset")
+        elif choice == '6':
+            shape = input("请输入要画的形状 (x 或 o): ").strip().lower()
+            if shape not in ['x', 'o']:
+                print("形状只能是 x 或 o！")
+                continue
+            pos_str = input("请输入位置编号 (0-8): ").strip()
+            if not pos_str.isdigit() or not (0 <= int(pos_str) <= 8):
+                print("位置只能是 0 到 8 之间的整数！")
+                continue
+            data = {"shape": shape, "position": int(pos_str)}
+            send_post(f"{gateway_url}/api/game/manual_draw", json_data=data)
         elif choice == '0':
             print("退出终端控制。")
             sys.exit(0)

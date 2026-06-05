@@ -336,6 +336,11 @@ class FrontendSignalRequest(BaseModel):
     signal: str = Field(..., description="frontend signal, e.g. ready_for_recognizing")
 
 
+class ManualDrawRequest(BaseModel):
+    shape: str = Field(..., description="x or o")
+    position: int = Field(..., ge=0, le=8, description="Cell index 0-8")
+
+
 @router.post("/start")
 async def game_start(request: Request, payload: StartGameRequest) -> JSONResponse:
     session = _get_session(request)
@@ -370,6 +375,14 @@ async def frontend_signal(request: Request, payload: FrontendSignalRequest) -> J
     if payload.signal == "ready_for_recognizing" and session.state == GameState.WAITING_HUMAN:
         _transition_to(request, GameState.RECOGNIZING, "frontend confirmed ready for vision")
     return JSONResponse({"status": "success", "session": _sync_session_snapshot(session)})
+
+
+@router.post("/manual_draw")
+async def manual_draw(request: Request, payload: ManualDrawRequest) -> JSONResponse:
+    # 2 -> draw O, 4 -> draw X
+    task_id = 4 if payload.shape.lower() == 'x' else 2
+    request.app.state.app.ipc_client.send_task_command(task_id, payload.position, 0)
+    return JSONResponse({"status": "success", "message": f"Sent command to draw {payload.shape.upper()} at position {payload.position}"})
 
 
 @router.post("/vision/board_state")
