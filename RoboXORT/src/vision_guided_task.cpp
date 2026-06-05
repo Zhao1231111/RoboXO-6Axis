@@ -70,6 +70,152 @@ static VisionGuidedTaskConfig load_vision_guided_task_config(const string &confi
     return config;
 }
 
+static bool detect_target_pose_base(const string &target,
+                                    const VisionGuidedTaskConfig &task_config,
+                                    const VisionClientConfig &vision_config,
+                                    VectorXd &object_pose_base) {
+    VisionDetectionResult result;
+    string error;
+    if (!request_vision_detection(target, result, error)) {
+        cerr << "[视觉任务] 请求失败: " << error << endl;
+        return false;
+    }
+    if (!result.ok) {
+        cerr << "[视觉任务] 识别失败: " << (result.error.empty() ? error : result.error) << endl;
+        return false;
+    }
+
+    Vector3d object_board(
+        result.center_board_mm[0],
+        result.center_board_mm[1],
+        result.center_board_mm[2]
+    );
+    Vector3d grasp_rpy_board = task_config.grasp_rpy_board;
+    if (task_config.use_object_angle) {
+        const double raw_grasp_yaw = grasp_rpy_board(2) - result.angle_board_rad;
+        grasp_rpy_board(2) = normalize_symmetric_yaw_near(raw_grasp_yaw, task_config.grasp_rpy_board(2));
+    }
+    object_pose_base = board_pose_to_base_pose(vision_config, object_board, grasp_rpy_board);
+
+    cout << "[视觉任务] target: " << result.target << endl;
+    cout << "[视觉任务] center_px: [" << result.center_px[0] << ", " << result.center_px[1] << "]" << endl;
+    cout << "[视觉任务] center_board_mm: [" << object_board(0) << ", " << object_board(1) << ", " << object_board(2) << "]" << endl;
+    cout << "[视觉任务] angle_board_rad: " << result.angle_board_rad << endl;
+    cout << "[视觉任务] cleaned_grasp_yaw_board_rad: " << grasp_rpy_board(2) << endl;
+    cout << "[视觉任务] object_pose_base(x y z rx ry rz): " << object_pose_base.transpose() << endl;
+    cout << "[视觉任务] pick_lift_mm: " << task_config.pick_lift_mm << endl;
+    return true;
+}
+
+static void pick_pose(const VectorXd &pose_base, double lift_mm) {
+    VectorXd above_pose_base = pose_base;
+    above_pose_base(2) += lift_mm;
+
+    cout << "[视觉任务] PTP 到物体正上方 " << lift_mm << "mm..." << endl;
+    ptp_motion_to_cartesian_base(above_pose_base);
+
+    cout << "[视觉任务] MoveLine 向下 " << lift_mm << "mm + 13mm..." << endl;
+    lining_motion_test(0.0, 0.0, -lift_mm - 13.0);
+
+    cout << "[视觉任务] 关闭夹爪..." << endl;
+    set_gripper(false);
+    usleep(500000);
+
+    cout << "[视觉任务] MoveLine 向上 " << lift_mm << "mm..." << endl;
+    lining_motion_test(0.0, 0.0, lift_mm);
+}
+
+static void place_pose(const VectorXd &pose_base, double lift_mm) {
+    VectorXd above_pose_base = pose_base;
+    above_pose_base(2) += lift_mm;
+
+    cout << "[视觉任务] place_pose_base(x y z rx ry rz): " << pose_base.transpose() << endl;
+    cout << "[视觉任务] PTP 到放置点正上方 " << lift_mm << "mm..." << endl;
+    ptp_motion_to_cartesian_base(above_pose_base);
+
+    cout << "[视觉任务] MoveLine 向下 " << lift_mm << "mm + 13mm..." << endl;
+    lining_motion_test(0.0, 0.0, -lift_mm - 13.0);
+
+    cout << "[视觉任务] 张开夹爪..." << endl;
+    set_gripper(true);
+    usleep(500000);
+
+    cout << "[视觉任务] MoveLine 向上 " << lift_mm << "mm..." << endl;
+    lining_motion_test(0.0, 0.0, lift_mm);
+}
+
+static bool detect_and_pick_target(const string &target,
+                                   const VisionGuidedTaskConfig &task_config,
+                                   const VisionClientConfig &vision_config) {
+    cout << "[视觉任务] 张开夹爪，准备识别 target: " << target << endl;
+    set_gripper(true);
+
+    VectorXd object_pose_base(6);
+    if (!detect_target_pose_base(target, task_config, vision_config, object_pose_base)) {
+        return false;
+    }
+
+    pick_pose(object_pose_base, task_config.pick_lift_mm);
+    return true;
+}
+
+static void run_branch_a(const VisionGuidedTaskConfig &task_config,
+                         const VisionClientConfig &vision_config) {
+    cout << "\n========== 功能分支 A：循环识别抓取 ==========" << endl;
+    cout << "[视觉任务] 回零..." << endl;
+    move_home_position();
+
+    while (true) {
+        cout << "\n请输入待抓取物品名: ";
+        string target;
+        if (!(cin >> target)) {
+            cerr << "[视觉任务] 输入流结束，退出分支 A。" << endl;
+            return;
+        }
+
+        if (!detect_and_pick_target(target, task_config, vision_config)) {
+            cout << "[视觉任务] 回零..." << endl;
+            move_home_position();
+            continue;
+        }
+
+        cout << "[视觉任务] 回零..." << endl;
+        move_home_position();
+    }
+}
+
+static void run_branch_b(const VisionGuidedTaskConfig &task_config,
+                         const VisionClientConfig &vision_config) {
+    cout << "\n========== 功能分支 B：固定完整流程 ==========" << endl;
+
+    VectorXd eraser_place_pose_base(6);
+    eraser_place_pose_base << 527.294, 249.506, 330.013, 3.14159, 0.0, 0.0;
+
+    VectorXd pen_place_pose_base(6);
+    pen_place_pose_base << 527.294, 149.506, 330.013, 3.14159, 0.0, 0.0;
+
+    cout << "[视觉任务] 回零..." << endl;
+    move_home_position();
+
+    if (!detect_and_pick_target("eraser", task_config, vision_config)) {
+        return;
+    }
+    place_pose(eraser_place_pose_base, task_config.pick_lift_mm);
+
+    cout << "[视觉任务] 回零..." << endl;
+    move_home_position();
+
+    if (!detect_and_pick_target("pen", task_config, vision_config)) {
+        return;
+    }
+    place_pose(pen_place_pose_base, task_config.pick_lift_mm);
+
+    cout << "[视觉任务] 回零..." << endl;
+    move_home_position();
+
+    cout << "========== 功能分支 B 完成 ==========" << endl;
+}
+
 } // namespace
 
 void run_vision_object_task() {
@@ -83,59 +229,21 @@ void run_vision_object_task() {
         usleep(500000);
     }
 
-    cout << "[视觉任务] 开始前回零..." << endl;
-    move_home_position();
-    set_gripper(true);
+    cout << "\n请选择功能分支:" << endl;
+    cout << "  A: 循环输入物品名并识别抓取" << endl;
+    cout << "  B: eraser 固定放置 + pen 固定偏移放置" << endl;
+    cout << "指令> ";
 
-    VisionDetectionResult result;
-    string error;
-    if (!request_vision_detection(task_config.target, result, error)) {
-        cerr << "[视觉任务] 请求失败: " << error << endl;
+    string branch;
+    cin >> branch;
+    if (branch == "A" || branch == "a") {
+        run_branch_a(task_config, vision_config);
+    } else if (branch == "B" || branch == "b") {
+        run_branch_b(task_config, vision_config);
+    } else {
+        cerr << "[视觉任务] 未知功能分支: " << branch << endl;
         return;
     }
-    if (!result.ok) {
-        cerr << "[视觉任务] 识别失败: " << (result.error.empty() ? error : result.error) << endl;
-        return;
-    }
-
-    Vector3d object_board(
-        result.center_board_mm[0],
-        result.center_board_mm[1],
-        result.center_board_mm[2]
-    );
-    Vector3d grasp_rpy_board = task_config.grasp_rpy_board;
-    if (task_config.use_object_angle) {
-        const double raw_grasp_yaw = grasp_rpy_board(2) - result.angle_board_rad;
-        grasp_rpy_board(2) = normalize_symmetric_yaw_near(raw_grasp_yaw, task_config.grasp_rpy_board(2));
-    }
-    VectorXd object_pose_base = board_pose_to_base_pose(vision_config, object_board, grasp_rpy_board);
-
-    cout << "[视觉任务] target: " << result.target << endl;
-    cout << "[视觉任务] center_px: [" << result.center_px[0] << ", " << result.center_px[1] << "]" << endl;
-    cout << "[视觉任务] center_board_mm: [" << object_board(0) << ", " << object_board(1) << ", " << object_board(2) << "]" << endl;
-    cout << "[视觉任务] angle_board_rad: " << result.angle_board_rad << endl;
-    cout << "[视觉任务] cleaned_grasp_yaw_board_rad: " << grasp_rpy_board(2) << endl;
-    cout << "[视觉任务] object_pose_base(x y z rx ry rz): " << object_pose_base.transpose() << endl;
-    cout << "[视觉任务] pick_lift_mm: " << task_config.pick_lift_mm << endl;
-
-    VectorXd above_object_base = object_pose_base;
-    above_object_base(2) += task_config.pick_lift_mm;
-
-    cout << "[视觉任务] PTP 到物体正上方 30cm..." << endl;
-    ptp_motion_to_cartesian_base(above_object_base);
-
-    cout << "[视觉任务] MoveLine 向下 30cm..." << endl;
-    lining_motion_test(0.0, 0.0, -task_config.pick_lift_mm - 13);
-
-    cout << "[视觉任务] 关闭夹爪..." << endl;
-    set_gripper(false);
-    usleep(500000);
-
-    cout << "[视觉任务] MoveLine 向上 30cm..." << endl;
-    lining_motion_test(0.0, 0.0, task_config.pick_lift_mm);
-
-    cout << "[视觉任务] 回零..." << endl;
-    move_home_position();
 
     cout << "========== 视觉引导物体任务结束 ==========" << endl;
 }
