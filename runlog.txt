@@ -1,0 +1,92 @@
+[Task Executor] 收到任务指令: 2 参数: 0
+[任务] 在格子 0 画 O...
+[WARN] CSP clamp axis 4: delta=19145 > limit=18643
+[WARN] CSP clamp axis 4: delta=81584 > limit=18643
+[WARN] CSP clamp axis 5: delta=-19945 > limit=18636
+[WARN] CSP clamp axis 4: delta=62940 > limit=18643
+[WARN] CSP clamp axis 4: delta=44297 > limit=18643
+[WARN] CSP clamp axis 4: delta=25654 > limit=18643
+[WARN] CSP clamp axis 2: delta=23359 > limit=23307
+[WARN] CSP clamp axis 4: delta=22678 > limit=18643
+[Task Executor] 任务执行完毕
+
+[Task Executor] 收到任务指令: 2 参数: 5
+[任务] 在格子 5 画 O...
+[WARN] CSP clamp axis 4: delta=66950 > limit=18643
+[WARN] CSP clamp axis 4: delta=48307 > limit=18643
+[WARN] CSP clamp axis 4: delta=29659 > limit=18643
+[WARN] CSP clamp axis 4: delta=-24931 > limit=18643
+[WARN] CSP clamp axis 4: delta=-79617 > limit=18643
+[WARN] CSP clamp axis 4: delta=-60973 > limit=18643
+[WARN] CSP clamp axis 4: delta=-42329 > limit=18643
+[WARN] CSP clamp axis 4: delta=-23683 > limit=18643
+[Task Executor] 任务执行完毕
+
+[Task Executor] 收到任务指令: 2 参数: 6
+[任务] 在格子 6 画 O...
+[WARN] CSP clamp axis 4: delta=78261 > limit=18643
+[WARN] CSP clamp axis 4: delta=59619 > limit=18643
+[WARN] CSP clamp axis 4: delta=40976 > limit=18643
+[WARN] CSP clamp axis 4: delta=22333 > limit=18643
+[WARN] CSP clamp axis 4: delta=38144 > limit=18643
+[WARN] CSP clamp axis 4: delta=19502 > limit=18643
+[Task Executor] 任务执行完毕
+
+[Task Executor] 收到任务指令: 2 参数: 1
+[任务] 在格子 1 画 O...
+[WARN] CSP clamp axis 4: delta=-189057 > limit=18643
+[WARN] CSP clamp axis 4: delta=-170415 > limit=18643
+[WARN] CSP clamp axis 4: delta=-151772 > limit=18643
+[WARN] CSP clamp axis 4: delta=-133129 > limit=18643
+[WARN] CSP clamp axis 4: delta=-114486 > limit=18643
+[WARN] CSP clamp axis 4: delta=-95843 > limit=18643
+[WARN] CSP clamp axis 4: delta=-77200 > limit=18643
+[WARN] CSP clamp axis 4: delta=-58558 > limit=18643
+[WARN] CSP clamp axis 4: delta=-39916 > limit=18643
+[WARN] CSP clamp axis 4: delta=-21274 > limit=18643
+[Task Executor] 任务执行完毕
+
+[Task Executor] 收到任务指令: 5 参数: 0
+display>0.2**********************************************[WARN] CSP clamp axis 4: delta=-30230 > limit=18643
+display>0.2**********************************************[Task Executor] 任务执行完毕
+
+[Task Executor] 收到任务指令: 3 参数: 0
+
+ 移动到橡皮中心上方...
+
+[交互] 已移动到物体上方，准备下移并开始抓取
+1
+
+[抓取流程] 步骤1：PTP移动到目标正上方安全点...
+[抓取流程] 步骤2：张开夹爪...
+[抓取流程] 步骤3：垂直下降 95 mm...
+[抓取流程] 步骤4：闭合夹爪，抓取物体...
+[抓取流程] 步骤5：垂直上升返回原高度...
+display>0.2**********************************************[抓取流程] 抓取动作执行完毕！
+[WARN] CSP clamp axis 4: delta=23716 > limit=18643
+display>0.2**********************************************
+[内部标定] 记录当前姿态的基准力矩...
+
+[动作 3] 开始缓慢下探并检测白板碰撞...
+display>0.2**********************************************
+[底层运动控制] 触发力矩检测！已截断剩余轨迹。
+[任务状态] 成功接触白板！机器人已安全停止下探。
+   - [力矩详情] 阈值设定: 100
+   - [力矩详情] 基准力矩 J2: 85 | J3: 230
+   - [力矩详情] 触发力矩 J2: 77 | J3: 126
+   - [力矩详情] 实际偏差 J2: 8 | J3: 104
+
+[动作 4] 施加额外下压 (3mm) 以保证擦拭摩擦力...
+display>0.2**********************************************
+[动作 5] 开始执行 S 形全覆盖擦除动作...
+display>0.2**********************************************[WARN] CSP clamp axis 4: delta=70761 > limit=18643
+[WARN] CSP clamp axis 4: delta=52118 > limit=18643
+[WARN] CSP clamp axis 4: delta=33475 > limit=18643
+display>0.2**********************************************display>0.2**********************************************display>0.2**********************************************display>0.2**********************************************display>0.2**********************************************display>0.2**********************************************display>0.2**********************************************display>0.2**********************************************display>0.2**********************************************display>0.2**********************************************display>0.2**********************************************display>0.2**********************************************[WARN] CSP clamp axis 5: delta=30058 > limit=18636
+[Task Executor] 任务执行完毕
+^C
+收到信号 2，正在关闭...
+[IPC] Client disconnected.
+[IPC] EStop triggered due to client disconnect.
+[Task Executor] 退出
+
