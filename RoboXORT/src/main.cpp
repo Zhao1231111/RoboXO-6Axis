@@ -28,6 +28,7 @@ using namespace std;
 ipc::SharedRobotState                g_shared_state;
 ipc::JogCommandPacked                g_jog_cmd;
 std::atomic<bool>                    g_estop{false};
+std::atomic<bool>                    g_task_active{false};
 ipc::SPSCQueue<ipc::IOCommand, 16>  g_io_queue;
 ipc::SPSCQueue<ipc::TaskCommandPayload, 16> g_task_queue;
 std::atomic<bool>                    g_abort_trajectory{false};
@@ -435,8 +436,13 @@ static void cyclic_task() {
             for (int i = 3; i < 6; i++) tcp[i] = rad2deg(tcp[i]);
 
             uint32_t io = (uint32_t(io_in_val) << 16) | uint32_t(EC_READ_U16(ec_domain_pd + ec_offsets.io_out));
-            uint8_t safety = (jog.active || !g_general_6s->get_angle_deque().empty())
-                           ? ipc::SAFETY_MOVING : ipc::SAFETY_BRAKED;
+            uint8_t safety;
+            if (g_estop.load(std::memory_order_relaxed))
+                safety = ipc::SAFETY_ESTOP;
+            else if (g_task_active.load(std::memory_order_relaxed))
+                safety = ipc::SAFETY_ACTIVE;
+            else
+                safety = ipc::SAFETY_IDLE;
             g_shared_state.write(joints, tcp, io, safety);
         }
 

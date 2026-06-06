@@ -9,6 +9,7 @@
 extern ipc::SharedRobotState   g_shared_state;
 extern ipc::JogCommandPacked   g_jog_cmd;
 extern std::atomic<bool>       g_estop;
+extern std::atomic<bool>       g_task_active;
 extern ipc::SPSCQueue<ipc::IOCommand, 16> g_io_queue;
 extern ipc::SPSCQueue<ipc::TaskCommandPayload, 16> g_task_queue;
 

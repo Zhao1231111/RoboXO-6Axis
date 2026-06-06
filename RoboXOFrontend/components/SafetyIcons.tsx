@@ -106,12 +106,12 @@ function DisconnectIcon({ color }: { color: string }) {
 
 export default function SafetyIcon({ state }: { state: SafetyState }) {
   switch (state) {
-    case "braked":
-      return <img src="/icons/ISO_7010_E065.svg" alt="countdown" className="h-full" />;
+    case "idle":
+      return <img src="/icons/ISO_7010_E065.svg" alt="safe" className="h-full" />;
     case "countdown":
       return <img src="/icons/ISO_7010_P004.svg" alt="countdown" className="h-full" />;
-    case "moving":
-      return <img src="/icons/ISO_7010_W019.svg" alt="countdown" className="h-full" />;
+    case "task_active":
+      return <img src="/icons/ISO_7010_W019.svg" alt="task active" className="h-full" />;
     case "estop":
       return <img src="/icons/ISO_7010_P010.svg" alt="estop" className="h-full" />;
     case "disconnected":

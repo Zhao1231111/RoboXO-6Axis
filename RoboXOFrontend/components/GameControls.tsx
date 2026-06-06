@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Dropdown, Option, Button } from "@fluentui/react-components";
 import type { Score, GamePhase } from "@/types";
 
@@ -8,53 +9,93 @@ interface GameControlsProps {
   firstMove: string;
   score: Score;
   gamePhase: GamePhase;
+  countdown?: number;
+  gameResult?: string | null;
   onDifficultyChange?: (val: string) => void;
   onFirstMoveChange?: (val: string) => void;
   onStart?: () => void;
-  onStop?: () => void;
+  onProceed?: () => void;
   onReset?: () => void;
 }
 
 const PHASE_LABELS: Record<GamePhase, string> = {
-  idle: "就绪，等待开始",
-  drawing_board: "正在绘制棋盘…",
-  wait_human: "等待人类落子",
-  recognizing: "正在识别棋盘…",
-  robot_thinking: "机器人思考中…",
-  countdown: "即将开始运动",
-  moving: "机器人运动中",
-  braked: "已完成，等待下一步",
-  game_over: "对局结束",
+  idle: "准备好",
+  alarming: "警告！机器人即将起动",
+  grabbing_pen: "正在抓取笔及绘制棋盘…",
+  waiting_human: "请落子；请在离开机器人工作范围后按继续按钮",
+  recognizing: "等待视觉识别反馈…",
+  thinking: "机器人思考中…",
+  drawing_chess: "机器人正在绘制落子…",
+  check_end: "检查结果…",
+  game_over: "对局完成",
+  dropping_pen: "正在放回马克笔…",
   erasing: "正在擦除棋盘…",
 };
 
-const IDLE_PHASES: GamePhase[] = ["idle", "game_over"];
+const PROCEED_PHASES: GamePhase[] = ["waiting_human", "game_over"];
 
 export default function GameControls({
   difficulty,
   firstMove,
   score,
   gamePhase,
+  countdown,
+  gameResult,
   onDifficultyChange,
   onFirstMoveChange,
   onStart,
-  onStop,
+  onProceed,
   onReset,
 }: GameControlsProps) {
-  const isIdle = IDLE_PHASES.includes(gamePhase);
-  const isBusy =
-    gamePhase === "drawing_board" ||
-    gamePhase === "recognizing" ||
-    gamePhase === "robot_thinking" ||
-    gamePhase === "countdown" ||
-    gamePhase === "moving" ||
-    gamePhase === "erasing";
+  const isIdle = gamePhase === "idle";
+  const canProceed = PROCEED_PHASES.includes(gamePhase);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio("/alarm.ogg");
+      audioRef.current.loop = true;
+    }
+    const audio = audioRef.current;
+
+    if (gamePhase === "alarming") {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+
+    return () => {
+      audio.pause();
+    };
+  }, [gamePhase]);
+
+  const resultLabel =
+    gameResult === "human_win"
+      ? "你赢了！"
+      : gameResult === "robot_win"
+        ? "机器人赢了"
+        : gameResult === "draw"
+          ? "平局"
+          : null;
 
   return (
     <div className="flex flex-col gap-4 h-full justify-center">
-      <p className="text-xl font-semibold">
+      <p className="text-3xl font-bold">
         {PHASE_LABELS[gamePhase]}
       </p>
+
+      {gamePhase === "alarming" && countdown != null && countdown > 0 && (
+        <p className="text-5xl font-mono font-bold tabular-nums text-amber-500">
+          {countdown.toFixed(1)}s
+        </p>
+      )}
+
+      {resultLabel && (
+        <p className="text-2xl font-semibold">{resultLabel}</p>
+      )}
 
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1">
@@ -107,35 +148,35 @@ export default function GameControls({
         ) : (
           <Button
             appearance="primary"
-            className="min-h-12 flex-1 !bg-[#C4314B] !text-white hover:!bg-[#a52a3f]"
-            onClick={onStop}
-            disabled={isBusy}
+            className="min-h-12 flex-1"
+            onClick={onProceed}
+            disabled={!canProceed}
           >
-            停止对局
+            继续
           </Button>
         )}
         <Button
           appearance="secondary"
           className="min-h-12 flex-1"
           onClick={onReset}
-          disabled={gamePhase !== "game_over"}
+          disabled={isIdle}
         >
-          重来
+          重置
         </Button>
       </div>
 
       <div className="flex gap-4 text-sm font-mono">
         <span>
           <span className="text-foreground/50">胜</span>{" "}
-          <span className="font-bold">{score.wins}</span>
+          <span className="font-bold">{score.human}</span>
         </span>
         <span>
           <span className="text-foreground/50">负</span>{" "}
-          <span className="font-bold">{score.losses}</span>
+          <span className="font-bold">{score.robot}</span>
         </span>
         <span>
           <span className="text-foreground/50">平</span>{" "}
-          <span className="font-bold">{score.draws}</span>
+          <span className="font-bold">{score.draw}</span>
         </span>
       </div>
     </div>

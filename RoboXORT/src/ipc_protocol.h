@@ -86,7 +86,7 @@ struct StatusReportPayload {
     double   tcp_mm_deg[6];   // 48 bytes
     uint32_t io_state;        // 4 bytes
     uint8_t  phase;           // 1 byte (reserved, always 0)
-    uint8_t  safety;          // 1 byte: 0=braked, 1=moving, 2=estop
+    uint8_t  safety;          // 1 byte: 0=no_task, 1=task_active, 2=estop
     uint8_t  _pad[2];         // 2 bytes
 };
 static_assert(sizeof(StatusReportPayload) == 104, "StatusReportPayload must be 104 bytes");
@@ -101,8 +101,8 @@ struct ErrorPayload {
 
 // --- Safety states ---
 enum Safety : uint8_t {
-    SAFETY_BRAKED = 0,
-    SAFETY_MOVING = 1,
+    SAFETY_IDLE   = 0,  // 无自动任务
+    SAFETY_ACTIVE = 1,  // 自动任务进行中
     SAFETY_ESTOP  = 2,
 };
 
@@ -186,7 +186,7 @@ struct SharedRobotState {
     double   joints_deg[6]{};
     double   tcp_mm_deg[6]{};
     uint32_t io_state{0};
-    uint8_t  safety{SAFETY_BRAKED};
+    uint8_t  safety{SAFETY_IDLE};
     uint8_t  phase{0};
 
     void write(const double* joints, const double* tcp, uint32_t io, uint8_t safe) {

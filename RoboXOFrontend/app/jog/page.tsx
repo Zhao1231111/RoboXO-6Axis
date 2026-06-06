@@ -15,7 +15,7 @@ export default function JogPage() {
 
   return (
     <div className="flex h-full gap-4 p-4">
-      <RobotView3D joints={state.joints} className="w-[40%] shrink-0" />
+      <RobotView3D joints={state.joints} cartesian={state.cartesian} className="w-[40%] shrink-0" />
 
       <div className="flex-1 flex flex-col gap-3 min-w-0">
         <SpeedSelector value={speed} onChange={setSpeed} />

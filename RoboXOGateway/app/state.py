@@ -9,13 +9,14 @@ from typing import TYPE_CHECKING
 from starlette.websockets import WebSocket
 
 if TYPE_CHECKING:
+    from app.game_fsm import GameFSM
     from app.ipc.client import IPCClient
 
 
 _GRIPPER_OPEN_BIT = 14
 _GRIPPER_CLOSE_BIT = 15
 
-SAFETY_MAP = {0: "braked", 1: "moving", 2: "estop"}
+SAFETY_MAP = {0: "idle", 1: "task_active", 2: "estop"}
 
 
 @dataclass(slots=True)
@@ -42,8 +43,9 @@ class RobotStatus:
 class AppState:
     """Singleton holding runtime state for the entire application."""
 
-    def __init__(self, ipc_client: IPCClient) -> None:
+    def __init__(self, ipc_client: IPCClient, game_fsm: GameFSM) -> None:
         self.ipc_client = ipc_client
+        self.game_fsm = game_fsm
         self.latest_status: RobotStatus | None = None
         self.ws_clients: set[WebSocket] = set()
         self.start_time: float = time.time()

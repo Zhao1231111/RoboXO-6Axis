@@ -6,7 +6,7 @@ extern General_6S* g_general_6s;
 
 int L = 160;
 
-double csp_vel_limit_dps[6] = {10.0, 10.0, 10.0, 10.0, 10.0, 10.0};
+double csp_vel_limit_dps[6] = {30.0, 30.0, 30.0, 30.0, 30.0, 30.0};
 int    csp_max_inc_per_cycle[6] = {};
 
 void init_robot_params() {

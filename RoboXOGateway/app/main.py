@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
+from app.game_fsm import GameFSM
 from app.ipc.client import IPCClient
 from app.ipc.protocol import Frame
 from app.routers import game, robot, system
@@ -144,8 +145,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     loop = asyncio.get_running_loop()
 
     ipc_client = IPCClient(settings.ipc_socket_path, queue, loop)
-    app_state = AppState(ipc_client=ipc_client)
-    app_state.alarm_scheduler = AlarmScheduler(loop)  # type: ignore[attr-defined]
+    alarm_scheduler = AlarmScheduler(loop)
+    game_fsm = GameFSM(ipc_client=ipc_client, alarm_scheduler=alarm_scheduler)
+    app_state = AppState(ipc_client=ipc_client, game_fsm=game_fsm)
+    app_state.alarm_scheduler = alarm_scheduler  # type: ignore[attr-defined]
     app.state.app = app_state
 
     ipc_client.connect()
@@ -183,4 +186,4 @@ app.include_router(game.router)
 app.include_router(system.router)
 app.include_router(ws_router)
 
-app.mount("/", StaticFiles(directory="public", html=True, follow_symlink=True), name="frontend")
+app.mount("/", StaticFiles(directory="../RoboXOFrontend/out", html=True, follow_symlink=True), name="frontend")

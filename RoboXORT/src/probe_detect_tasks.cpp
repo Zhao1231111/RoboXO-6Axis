@@ -1,4 +1,5 @@
 #include "probe_detect_tasks.h"
+#include "motion_control.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -43,6 +44,16 @@ void get_joint_Position_initial(VectorXd &position_current_angle)
 }
 
 bool probe_and_press(int torque_threshold, double &out_z_height) {
+    if (g_sim_mode) {
+        cout << "\n[SIM] 跳过力矩检测，执行固定微动下探..." << endl;
+        lining_motion_test(0.0, 0.0, -5.0);
+        lining_motion_test(0.0, 0.0, -5.0);
+        VectorXd final_pos = lining_motion_test(0.0, 0.0, -5.0);
+        out_z_height = final_pos(2);
+        cout << "[SIM] 模拟下探完成, Z=" << out_z_height << endl;
+        return true;
+    }
+
     cout << "\n[内部标定] 记录当前姿态的基准力矩..." << endl;
     sleep(1); // 停留1秒，确保机器人完全静止且受力稳定
     int q_size = tor_deque_out.size();

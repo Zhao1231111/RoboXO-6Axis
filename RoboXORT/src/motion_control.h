@@ -24,6 +24,7 @@ extern bool is_touch_probing;
 extern bool touch_detected;
 extern std::atomic<bool> g_abort_trajectory;
 extern std::atomic<bool> g_estop;
+extern bool g_sim_mode;
 
 /**
  * @brief 将机器人的各个关节移动到初始（零点）位置，并阻塞等待直至完成

@@ -10,7 +10,7 @@ import time
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.config import settings
-from app.ipc.messages import MsgType, StatusReport, decode_status_report
+from app.ipc.messages import MsgType, decode_status_report
 from app.ipc.protocol import Frame
 from app.state import AppState, RobotStatus
 
@@ -18,22 +18,31 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_EMPTY_BOARD: list[list[int]] = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
 
+def _build_ws_message(app_state: AppState) -> str:
+    status = app_state.latest_status
+    fsm = app_state.game_fsm
 
-def _build_ws_message(status: RobotStatus) -> str:
-    return json.dumps(
-        {
-            "joints_deg": status.joints_deg,
-            "tcp_mm_deg": status.tcp_mm_deg,
-            "gripper": status.gripper,
-            "io_state": status.io_state,
-            "board": _EMPTY_BOARD,
-            "phase": "idle",
-            "safety": status.safety_str,
-            "alarm_countdown": 0,
-        }
-    )
+    joints = status.joints_deg if status else [0.0] * 6
+    tcp = status.tcp_mm_deg if status else [0.0] * 6
+    gripper = status.gripper if status else "open"
+    io_state = status.io_state if status else 0
+    safety_str = status.safety_str if status else "idle"
+
+    snap = fsm.snapshot()
+
+    return json.dumps({
+        "joints_deg": joints,
+        "tcp_mm_deg": tcp,
+        "gripper": gripper,
+        "io_state": io_state,
+        "board": snap["board"],
+        "phase": snap["phase"],
+        "safety": safety_str,
+        "alarm_countdown": snap["alarm_countdown"],
+        "game_result": snap["game_result"],
+        "score": snap["score"],
+    })
 
 
 @router.websocket("/ws/state")
@@ -78,6 +87,8 @@ async def broadcast_loop(app_state: AppState, queue: asyncio.Queue[Frame]) -> No
     """Consume frames from the IPC reader and broadcast StatusReports via WebSocket."""
     logger.info("Broadcast loop started, waiting for IPC frames")
     frame_count = 0
+    prev_safety: int | None = None
+
     while True:
         frame = await queue.get()
         frame_count += 1
@@ -90,11 +101,21 @@ async def broadcast_loop(app_state: AppState, queue: asyncio.Queue[Frame]) -> No
                 io_state=report.io_state,
                 safety=report.safety,
             )
+
+            # Detect safety transitions and notify FSM
+            if prev_safety is not None and report.safety != prev_safety:
+                try:
+                    await app_state.game_fsm.on_safety_changed(report.safety)
+                except Exception:
+                    logger.exception("FSM on_safety_changed failed")
+            prev_safety = report.safety
+
             if frame_count == 1:
                 logger.info("First StatusReport received from C++ RT")
             if not app_state.ws_clients:
                 continue
-            msg = _build_ws_message(app_state.latest_status)
+
+            msg = _build_ws_message(app_state)
             stale: list[WebSocket] = []
             for ws in app_state.ws_clients.copy():
                 try:

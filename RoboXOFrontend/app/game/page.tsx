@@ -5,23 +5,29 @@ import SafetyStatusBar from "@/components/SafetyStatusBar";
 import Board from "@/components/Board";
 import RobotView3D from "@/components/RobotView3D";
 import GameControls from "@/components/GameControls";
-import { useRobotStateQuery } from "@/lib/api";
-import { MOCK_ROBOT_STATE } from "@/lib/mock-data";
+import {
+  useRobotStateQuery,
+  useGameStartMutation,
+  useGameProceedMutation,
+  useGameResetMutation,
+} from "@/lib/api";
 import { DEFAULT_ROBOT_STATE } from "@/types";
 
 export default function GamePage() {
-  const [difficulty, setDifficulty] = useState("easy");
+  const [difficulty, setDifficulty] = useState("hard");
   const [firstMove, setFirstMove] = useState("human");
   const { data: wsState = DEFAULT_ROBOT_STATE } = useRobotStateQuery();
 
-  // board/phase/score from mock until backend game API is implemented
-  const board = MOCK_ROBOT_STATE.board;
-  const gamePhase = MOCK_ROBOT_STATE.gamePhase;
-  const score = MOCK_ROBOT_STATE.score;
+  const [gameStart] = useGameStartMutation();
+  const [gameProceed] = useGameProceedMutation();
+  const [gameReset] = useGameResetMutation();
 
-  // safety/countdown from live WebSocket
+  const board = wsState.board;
+  const gamePhase = wsState.gamePhase;
+  const score = wsState.score;
   const safetyState = wsState.safetyState;
   const countdown = wsState.countdown;
+  const gameResult = wsState.gameResult;
 
   return (
     <div className="flex flex-col h-full">
@@ -32,18 +38,23 @@ export default function GamePage() {
 
       <div className="flex-1 grid grid-cols-[1fr_1fr_1fr] gap-4 p-4 min-h-0">
         <div className="flex items-center justify-center">
-          <Board board={board} />
+          <Board board={board} showLegend={gamePhase !== "idle"} />
         </div>
 
-        <RobotView3D joints={wsState.joints} className="h-full" />
+        <RobotView3D joints={wsState.joints} cartesian={wsState.cartesian} className="h-full" />
 
         <GameControls
           difficulty={difficulty}
           firstMove={firstMove}
           score={score}
           gamePhase={gamePhase}
+          countdown={countdown}
+          gameResult={gameResult}
           onDifficultyChange={setDifficulty}
           onFirstMoveChange={setFirstMove}
+          onStart={() => gameStart({ difficulty, first_player: firstMove })}
+          onProceed={() => gameProceed()}
+          onReset={() => gameReset()}
         />
       </div>
     </div>

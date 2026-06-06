@@ -1,7 +1,7 @@
 export type SafetyState =
-  | "braked"
+  | "idle"
+  | "task_active"
   | "countdown"
-  | "moving"
   | "estop"
   | "disconnected";
 
@@ -13,14 +13,15 @@ export type GripperState = "open" | "closed";
 
 export type GamePhase =
   | "idle"
-  | "drawing_board"
-  | "wait_human"
+  | "alarming"
+  | "grabbing_pen"
+  | "waiting_human"
   | "recognizing"
-  | "robot_thinking"
-  | "countdown"
-  | "moving"
-  | "braked"
+  | "thinking"
+  | "drawing_chess"
+  | "check_end"
   | "game_over"
+  | "dropping_pen"
   | "erasing";
 
 export interface CartesianPose {
@@ -33,9 +34,9 @@ export interface CartesianPose {
 }
 
 export interface Score {
-  wins: number;
-  losses: number;
-  draws: number;
+  human: number;
+  robot: number;
+  draw: number;
 }
 
 export interface RobotState {
@@ -48,6 +49,7 @@ export interface RobotState {
   safetyState: SafetyState;
   countdown: number;
   score: Score;
+  gameResult: string | null;
   ipcConnected: boolean;
 }
 
@@ -61,12 +63,14 @@ export interface WsMessage {
   phase: string;
   safety: string;
   alarm_countdown: number;
+  game_result: string | null;
+  score: { human: number; robot: number; draw: number };
 }
 
 const BOARD_VALUE_MAP: Record<number, CellValue> = {
   0: null,
-  1: "O",
-  2: "X",
+  1: "X",
+  2: "O",
 };
 
 export function wsMessageToRobotState(msg: WsMessage): Partial<RobotState> {
@@ -85,17 +89,17 @@ export function wsMessageToRobotState(msg: WsMessage): Partial<RobotState> {
     safetyState = "countdown";
   } else {
     switch (msg.safety) {
-      case "braked":
-        safetyState = "braked";
+      case "idle":
+        safetyState = "idle";
         break;
-      case "moving":
-        safetyState = "moving";
+      case "task_active":
+        safetyState = "task_active";
         break;
       case "estop":
         safetyState = "estop";
         break;
       default:
-        safetyState = "braked";
+        safetyState = "idle";
     }
   }
 
@@ -112,6 +116,8 @@ export function wsMessageToRobotState(msg: WsMessage): Partial<RobotState> {
     gamePhase: (msg.phase as GamePhase) || "idle",
     safetyState,
     countdown: msg.alarm_countdown,
+    score: msg.score,
+    gameResult: msg.game_result,
   };
 }
 
@@ -128,6 +134,7 @@ export const DEFAULT_ROBOT_STATE: RobotState = {
   gamePhase: "idle",
   safetyState: "disconnected",
   countdown: 0,
-  score: { wins: 0, losses: 0, draws: 0 },
+  score: { human: 0, robot: 0, draw: 0 },
+  gameResult: null,
   ipcConnected: false,
 };

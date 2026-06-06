@@ -8,11 +8,11 @@ export interface SafetyConfig {
 }
 
 const SAFETY_CONFIGS: Record<SafetyState, SafetyConfig> = {
-  braked: {
+  idle: {
     bgColor: "#237F52",
     textColor: "#FFFFFF",
     title: "安全",
-    description: "已抱闸，可以接近",
+    description: "机器人已抱闸，可以接近",
   },
   countdown: {
     bgColor: "#9B2423",
@@ -20,7 +20,7 @@ const SAFETY_CONFIGS: Record<SafetyState, SafetyConfig> = {
     title: "警告",
     description: "离开作业区域：机械臂将起动",
   },
-  moving: {
+  task_active: {
     bgColor: "#F9A900",
     textColor: "#000000",
     title: "警告",
@@ -48,7 +48,7 @@ export function getSafetyConfig(
   if (state === "countdown" && countdown !== undefined) {
     return {
       ...config,
-      description: `离开作业区域：机械臂将起动 — ${countdown}s`,
+      description: `离开作业区域：机械臂将起动 — ${countdown.toFixed(1)}s`,
     };
   }
   return config;

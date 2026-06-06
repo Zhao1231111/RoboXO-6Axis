@@ -43,10 +43,10 @@ void move_home_position()
     velocity_current_joint_test << 0, 0, 0, 0, 0, 0;		  // 设置当前速度
     acceleration_current_joint_test << 0, 0, 0, 0, 0, 0;      // 设置当前加速度
     double Ts_joint_test = 0.001;					          // 设置运动周期
-    double velocityPercent_joint_test = 10;					  // 设置速度百分比
+    double velocityPercent_joint_test = 50;					  // 设置速度百分比
     double accelerationPercent_joint_test = 10;				  // 设置加速度百分比
     double decelerationPercent_joint_test = 10;				  // 设置减速度百分比
-    double jacobiPercent_joint_test = 10;					  // 设置雅可比速度百分比 
+    double jacobiPercent_joint_test = 50;					  // 设置雅可比速度百分比 
 
     //************************************ 计算关节角度插补 ********************************
     std::deque<double> trajectory_joint_test;       // 队列存储整个路径中对应六个关节角度的插值
@@ -374,10 +374,10 @@ void joint_motion_test(VectorXd joint_angles_degree_offset,VectorXd origin_point
     acceleration_current_joint_test << 0, 0, 0, 0, 0, 0;		  // 设置当前加速度
     
     double Ts_joint_test = 0.001;					  // 设置运动周期
-    double velocityPercent_joint_test = 10;					  // 设置速度百分比
+    double velocityPercent_joint_test = 50;					  // 设置速度百分比
     double accelerationPercent_joint_test = 20;					  // 设置加速度百分比
     double decelerationPercent_joint_test = 20;					  // 设置减速度百分比
-    double jacobiPercent_joint_test = 10;					  // 设置雅可比速度百分比 
+    double jacobiPercent_joint_test = 50;					  // 设置雅可比速度百分比 
     
     std::deque<double> trajectory_joint_test;       
     g_general_6s->move_joint_interp(target_point_joint_test,
@@ -473,16 +473,20 @@ void grasp_pen(VectorXd target_point_cartesian, double &out_z_height){
     set_gripper(true);
     ptp_motion_to_cartesian_base(top_center);
 
-    cout << "\n[交互] 已移动到物体上方，准备下移并开始抓取" << endl;
-    string temp_input;
-    cin >> temp_input;
+    if (!g_sim_mode) {
+        cout << "\n[交互] 已移动到物体上方，准备下移并开始抓取" << endl;
+        string temp_input;
+        cin >> temp_input;
+    }
 
     // 抓取物体
     grasp_object(top_center, 370.015 + 50.0 - 353.516); // original: 75
 
-    // 等待用户输入确认后再继续
-    cout << "\n[交互] 抓取完成。请输入任意字符并按回车键，继续执行智能下探..." << endl;
-    cin >> temp_input;
+    if (!g_sim_mode) {
+        cout << "\n[交互] 抓取完成。请输入任意字符并按回车键，继续执行智能下探..." << endl;
+        string temp_input;
+        cin >> temp_input;
+    }
 }
 
 void grasp_eraser(VectorXd target_point_cartesian, double &out_z_height){
@@ -491,9 +495,11 @@ void grasp_eraser(VectorXd target_point_cartesian, double &out_z_height){
     top_center(2) += 90; // original: 70
     ptp_motion_to_cartesian_base(top_center);
 
-    cout << "\n[交互] 已移动到物体上方，准备下移并开始抓取" << endl;
-    string temp_input;
-    cin >> temp_input;
+    if (!g_sim_mode) {
+        cout << "\n[交互] 已移动到物体上方，准备下移并开始抓取" << endl;
+        string temp_input;
+        cin >> temp_input;
+    }
 
     // 抓取物体
     grasp_object(top_center, 95); // original: 75

@@ -137,6 +137,22 @@ export const api = createApi({
     systemStatus: builder.query<SystemStatus, void>({
       query: () => "/api/system/status",
     }),
+
+    gameStart: builder.mutation<void, { difficulty: string; first_player: string }>({
+      query: (body) => ({
+        url: "/api/game/start",
+        method: "POST",
+        body,
+      }),
+    }),
+
+    gameProceed: builder.mutation<void, void>({
+      query: () => ({ url: "/api/game/proceed", method: "POST" }),
+    }),
+
+    gameReset: builder.mutation<void, void>({
+      query: () => ({ url: "/api/game/reset", method: "POST" }),
+    }),
   }),
 });
 
@@ -147,4 +163,7 @@ export const {
   useEstopMutation,
   useIoSetMutation,
   useSystemStatusQuery,
+  useGameStartMutation,
+  useGameProceedMutation,
+  useGameResetMutation,
 } = api;

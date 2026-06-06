@@ -355,6 +355,7 @@ void task_executor_loop() {
             }
             if (g_estop) break;
 
+            g_task_active.store(true, std::memory_order_release);
             cout << "\n[Task Executor] 收到任务指令: " << (int)cmd.task_id << " 参数: " << cmd.arg1 << endl;
             
             switch (cmd.task_id) {
@@ -434,6 +435,7 @@ void task_executor_loop() {
                     cout << "[Task Executor] 未知任务 ID: " << (int)cmd.task_id << endl;
                     break;
             }
+            g_task_active.store(false, std::memory_order_release);
             cout << "[Task Executor] 任务执行完毕" << endl;
         } else {
             usleep(10000); // 10ms polling

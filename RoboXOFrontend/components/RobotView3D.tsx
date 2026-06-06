@@ -156,15 +156,54 @@ function RobotArm({ joints }: { joints: number[] }) {
   );
 }
 
-export default function RobotView3D({
+interface RobotView3DProps {
+  joints: number[];
+  cartesian?: { x: number; y: number; z: number; rx: number; ry: number; rz: number };
+  className?: string;
+}
+
+function CoordinateOverlay({
   joints,
-  className = "",
+  cartesian,
 }: {
   joints: number[];
-  className?: string;
+  cartesian?: RobotView3DProps["cartesian"];
 }) {
+  const jLabels = ["J1", "J2", "J3", "J4", "J5", "J6"];
+  const cLabels = ["X", "Y", "Z", "Rx", "Ry", "Rz"];
+  const cValues = cartesian
+    ? [cartesian.x, cartesian.y, cartesian.z, cartesian.rx, cartesian.ry, cartesian.rz]
+    : [0, 0, 0, 0, 0, 0];
+  const cUnits = ["mm", "mm", "mm", "°", "°", "°"];
+
   return (
-    <div className={`rounded-lg overflow-hidden bg-[#E8E6E1] ${className}`}>
+    <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none px-2 pt-1.5">
+      <div className="bg-black/60 backdrop-blur-sm rounded px-2 py-1 text-[11px] font-mono text-white/90 grid grid-cols-6 gap-x-1 gap-y-0.5 leading-tight">
+        {jLabels.map((label, i) => (
+          <span key={label} className="text-center">
+            <span className="text-white/50">{label}</span><br/>
+            {joints[i]?.toFixed(1) ?? "—"}°
+          </span>
+        ))}
+        {cLabels.map((label, i) => (
+          <span key={label} className="text-center">
+            <span className="text-white/50">{label}</span><br/>
+            {cValues[i]?.toFixed(1) ?? "—"}{cUnits[i]}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function RobotView3D({
+  joints,
+  cartesian,
+  className = "",
+}: RobotView3DProps) {
+  return (
+    <div className={`relative rounded-lg overflow-hidden bg-[#E8E6E1] ${className}`}>
+      <CoordinateOverlay joints={joints} cartesian={cartesian} />
       <Canvas
         camera={{ position: [1200, 800, 1200], fov: 45, near: 1, far: 10000 }}
       >
